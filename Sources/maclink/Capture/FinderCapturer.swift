@@ -50,7 +50,7 @@ struct FinderCapturer: Capturer {
         let inode: Int64? = stat(path, &statBuf) == 0 ? Int64(statBuf.st_ino) : nil
 
         let bookmarkData = try? url.bookmarkData(
-            options: [], // not .withSecurityScope — we're unsandboxed
+            options: [], // not .withSecurityScope: unsandboxed
             includingResourceValuesForKeys: [.nameKey, .contentTypeKey],
             relativeTo: nil
         )

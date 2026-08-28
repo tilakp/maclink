@@ -55,7 +55,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             return
         }
         // Activation must land before `show` computes the anchor rect, or
-        // the popover can appear detached from the status item — hence the
+        // the popover can appear detached from the status item. Hence the
         // hop to the next run loop tick rather than showing inline.
         NSApp.activate(ignoringOtherApps: true)
         DispatchQueue.main.async {

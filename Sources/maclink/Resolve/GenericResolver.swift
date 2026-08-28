@@ -3,7 +3,7 @@ import AppKit
 
 /// Best-effort resolution for `.generic` links (spec §7.5): activate the
 /// source app by bundle ID, then try to raise the specific window by title
-/// match. A `.generic` link is a breadcrumb, not a guarantee — failing to
+/// match. A `.generic` link is a breadcrumb, not a guarantee. Failing to
 /// raise the exact window is not treated as an error, only the app not
 /// being installed at all is.
 struct GenericResolver: Resolver {

@@ -77,7 +77,7 @@ struct CaptureToastView: View {
 }
 
 /// SwiftUI's `.onKeyPress` doesn't cleanly expose ⌘⌫ as a single case, so a
-/// thin NSViewRepresentable catches it directly — this is the toast's undo
+/// thin NSViewRepresentable catches it directly. This is the toast's undo
 /// shortcut (spec §9.2: "mis-fires are common").
 private struct KeyEquivalentCatcher: NSViewRepresentable {
     let onCommandDelete: () -> Void

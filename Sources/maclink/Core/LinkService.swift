@@ -28,14 +28,14 @@ final class LinkService {
         }
     }
 
-    /// Resolves and opens a link by id — the shared path for the
+    /// Resolves and opens a link by id. The shared path for the
     /// `maclink://open` URL route, the search dropdown, and the Recent menu.
     func open(id: UUID, reveal: Bool = false) {
         guard let record = try? store.fetch(id: id) else {
             recordDiagnostic("open: no such link \(id.uuidString)")
             NotificationService.notifyFailure(
                 title: "Link not found",
-                body: "This maclink doesn't exist — the database may have been reset or the link deleted."
+                body: "This maclink doesn't exist. The database may have been reset or the link deleted."
             )
             return
         }
@@ -45,7 +45,7 @@ final class LinkService {
                 // Order matters: `update` overwrites the whole row from a
                 // Swift value fetched before this resolve ran, so it must
                 // land before the narrow open_count/last_opened_at bump
-                // below — otherwise it clobbers that bump back to 0.
+                // below. Otherwise it clobbers that bump back to 0.
                 if let repaired {
                     try? store.update(repaired)
                 }
@@ -86,7 +86,7 @@ final class LinkService {
     }
 
     func captureFromHotkey() {
-        // Captured immediately, synchronously — the last moment it's
+        // Captured immediately, synchronously. The last moment it's
         // guaranteed to still be the app the user was actually looking at
         // (spec §4.4 step 1). maclink is LSUIElement and never activates
         // itself, so this stays correct even when triggered via the

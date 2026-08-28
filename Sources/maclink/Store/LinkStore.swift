@@ -4,7 +4,7 @@ import GRDB
 /// All persistence (spec §4.2 "LinkStore"). Owns migrations and tag
 /// management. `links_fts`/`links_fts_map` exist per the §8.2 schema so the
 /// database is ready for the FTS5-backed search described in §9.3, but this
-/// milestone searches via `LIKE` — contentless FTS5 delete/update needs
+/// milestone searches via `LIKE`. Contentless FTS5 delete/update needs
 /// SQLite's `contentless_delete` option (3.43+) handled carefully, and the
 /// spec explicitly sanctions LIKE as "genuinely fast enough" at MVP scale
 /// (§8.2). Swap the query in `search(_:limit:)` for FTS5 without touching
@@ -19,7 +19,7 @@ final class LinkStore {
         config.prepareDatabase { db in
             // Must run outside any transaction, or SQLite rejects the
             // journal_mode change ("cannot change into wal mode from
-            // within a transaction") — prepareDatabase runs right after
+            // within a transaction"). PrepareDatabase runs right after
             // the connection opens, before GRDB wraps anything.
             try db.execute(sql: "PRAGMA foreign_keys = ON")
             try db.execute(sql: "PRAGMA journal_mode = WAL")

@@ -47,7 +47,7 @@ struct SafariCapturer: Capturer {
     }
 
     /// Strips a small allowlist of tracking params but never touches the
-    /// fragment — the spec explicitly calls those out as often meaningful
+    /// fragment. The spec explicitly calls those out as often meaningful
     /// anchors, not cruft.
     static func stripTrackingParams(from urlString: String) -> String {
         guard var components = URLComponents(string: urlString), let items = components.queryItems, !items.isEmpty else {

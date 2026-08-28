@@ -16,7 +16,7 @@ struct FileResolver: Resolver {
             var stale = false
             if let url = try? URL(
                 resolvingBookmarkData: bookmarkData,
-                options: [], // not .withSecurityScope — unsandboxed
+                options: [], // not .withSecurityScope: unsandboxed
                 relativeTo: nil,
                 bookmarkDataIsStale: &stale
             ), FileManager.default.fileExists(atPath: url.path) {

@@ -17,7 +17,7 @@ struct HotkeyBinding: Equatable {
 enum HotkeySettings {
     private static let defaults = UserDefaults.standard
 
-    /// `nil` means "no hotkey assigned" — explicitly cleared by the user,
+    /// `nil` means "no hotkey assigned". Explicitly cleared by the user,
     /// distinct from "never configured" (which falls back to the default).
     static var capture: HotkeyBinding? {
         get { load(prefix: "hotkey.capture", default: .defaultCapture) }

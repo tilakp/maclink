@@ -14,7 +14,7 @@ enum AutomationError: Error, Equatable {
 /// through one queue; each call additionally runs on its own throwaway
 /// thread so a hung target app can be timed out from the caller's side
 /// without blocking the queue for other (unrelated) automation forever.
-/// (The in-flight Apple Event itself can't be cancelled — only the wait can.)
+/// (The in-flight Apple Event itself can't be cancelled. Only the wait can.)
 /// `@unchecked` because `compiledCache` is only ever touched from within
 /// `queue.async` closures, which the `DispatchQueue` serializes for us.
 final class AutomationService: @unchecked Sendable {

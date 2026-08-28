@@ -80,7 +80,7 @@ struct KeyRecorderView: NSViewRepresentable {
             if flags.contains(.shift) { carbonModifiers |= shiftKey; display += "⇧" }
             if flags.contains(.command) { carbonModifiers |= cmdKey; display += "⌘" }
 
-            // Require at least one modifier — a bare-letter global hotkey
+            // Require at least one modifier. A bare-letter global hotkey
             // would otherwise swallow normal typing everywhere.
             guard carbonModifiers != 0 else {
                 NSSound.beep()

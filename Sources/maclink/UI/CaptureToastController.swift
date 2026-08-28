@@ -36,7 +36,7 @@ final class CaptureToastController {
         let hosting = NSHostingController(rootView: view)
         // NSPanel(contentViewController:) sizes the window from the hosting
         // view's frame *at construction time*, which SwiftUI hasn't laid
-        // out yet — that produces a zero-size, invisible panel. Giving an
+        // out yet. That produces a zero-size, invisible panel. Giving an
         // explicit content rect up front avoids that trap.
         let panel = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 320, height: 110),
@@ -94,7 +94,7 @@ final class CaptureToastController {
         }
     }
 
-    /// Deletes only the records this capture actually created — a reused
+    /// Deletes only the records this capture actually created. A reused
     /// (deduped) record predates this capture and undo must not touch it.
     private func undo() {
         for id in newRecordIDs {

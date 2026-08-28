@@ -2,7 +2,7 @@ import UserNotifications
 
 /// Minimal user-visible feedback for failures, per spec §11: "never lose a
 /// capture silently; always tell the user why something failed." This is a
-/// stopgap ahead of the real capture toast (build order step 11) — a failed
+/// stopgap ahead of the real capture toast (build order step 11). A failed
 /// resolve or capture should never be invisible the way it was before this
 /// existed.
 enum NotificationService {

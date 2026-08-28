@@ -2,7 +2,7 @@ import SwiftUI
 
 /// The ⌃⌥⌘K search dropdown (spec §9.3, menu-bar-dropdown form factor per
 /// OQ-3). Plain substring search over title/subtitle/notes/tags/payload via
-/// `LinkStore` — the `type:`/`#tag`/`app:`/`since:` query mini-language is a
+/// `LinkStore`. The `type:`/`#tag`/`app:`/`since:` query mini-language is a
 /// later enhancement, not required for the dropdown to be useful.
 struct SearchPanelView: View {
     var onSelect: (LinkRecord) -> Void

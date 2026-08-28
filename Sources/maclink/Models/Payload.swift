@@ -1,7 +1,7 @@
 import Foundation
 
 /// Per-type JSON payload shapes, matching spec §8.3. All payloads carry `v: 1`.
-/// The wrapping `Payload` enum has no discriminator of its own — decoding is
+/// The wrapping `Payload` enum has no discriminator of its own. Decoding is
 /// driven by `LinkRecord.resourceType`, which already lives in its own column.
 enum Payload: Equatable {
     case file(FilePayload)

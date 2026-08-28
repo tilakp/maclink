@@ -3,7 +3,7 @@ import Foundation
 
 /// Global hotkeys via Carbon `RegisterEventHotKey` (spec §3.1, §4.2).
 /// Deliberately not `NSEvent.addGlobalMonitorForEvents`, which requires
-/// Accessibility permission just to observe keystrokes — this needs none.
+/// Accessibility permission just to observe keystrokes. This needs none.
 /// Bindings are user-configurable (persisted in `HotkeySettings`, `nil`
 /// meaning "no hotkey assigned") and can be changed at runtime from the
 /// Settings window.
@@ -31,7 +31,7 @@ final class HotkeyService {
 
     /// Re-registers the capture hotkey to a new binding (or clears it, for
     /// `nil`) and persists the result. Returns false without changing
-    /// anything if a non-nil binding couldn't be registered — most
+    /// anything if a non-nil binding couldn't be registered. Most
     /// commonly because another app already owns it.
     @discardableResult
     func updateCapture(_ binding: HotkeyBinding?) -> Bool {

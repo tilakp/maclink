@@ -44,7 +44,7 @@ private struct HotkeysSettingsView: View {
                     binding: captureBinding,
                     onCapture: { candidate in
                         guard HotkeyService.shared.updateCapture(candidate) else {
-                            conflictMessage = "Couldn't register \(candidate.display) — it may already be in use by another app."
+                            conflictMessage = "Couldn't register \(candidate.display). It may already be in use by another app."
                             return false
                         }
                         captureBinding = candidate
@@ -63,7 +63,7 @@ private struct HotkeysSettingsView: View {
                     binding: searchBinding,
                     onCapture: { candidate in
                         guard HotkeyService.shared.updateSearch(candidate) else {
-                            conflictMessage = "Couldn't register \(candidate.display) — it may already be in use by another app."
+                            conflictMessage = "Couldn't register \(candidate.display). It may already be in use by another app."
                             return false
                         }
                         searchBinding = candidate
@@ -108,7 +108,7 @@ private struct GeneralSettingsView: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var applied = true
     // Read fresh in .onAppear (not just at init) so this reflects changes
-    // made on the Hotkeys tab without needing a relaunch — a static literal
+    // made on the Hotkeys tab without needing a relaunch. A static literal
     // here was a real bug: it never updated after a rebind.
     @State private var captureDisplay = HotkeySettings.capture?.display ?? "None"
     @State private var searchDisplay = HotkeySettings.search?.display ?? "None"
@@ -125,7 +125,7 @@ private struct GeneralSettingsView: View {
             // both were observed to register a real login item on window
             // appearance with zero user interaction, for reasons that
             // didn't trace back to any code actually calling register().
-            // An explicit Apply button makes the system call unambiguous —
+            // An explicit Apply button makes the system call unambiguous:
             // it only ever runs from a real button-press event.
             HStack {
                 Toggle("Launch at login", isOn: $launchAtLogin)
@@ -181,7 +181,7 @@ private struct PermissionsSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("maclink checks these lazily on first use — a permission won't show Granted here until you've captured from that app at least once.")
+            Text("maclink checks these lazily on first use. A permission won't show Granted here until you've captured from that app at least once.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

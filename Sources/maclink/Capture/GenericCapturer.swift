@@ -3,13 +3,13 @@ import AppKit
 import UniformTypeIdentifiers
 
 /// Fallback for any app without a registered capturer, or when a specific
-/// capturer throws (spec §7.5). `supportedBundleIDs` is empty — `CaptureEngine`
+/// capturer throws (spec §7.5). `supportedBundleIDs` is empty. `CaptureEngine`
 /// treats that as "always eligible, tried last."
 ///
 /// The one trick worth knowing: `kAXDocumentAttribute` on the focused window
 /// is a `file://` URL for most document-based apps (TextEdit, Pages, Preview,
 /// Xcode, BBEdit, Word, ...) even though none of them have a dedicated
-/// capturer — that single AX read covers all of them for free.
+/// capturer. That single AX read covers all of them for free.
 struct GenericCapturer: Capturer {
     let supportedBundleIDs: Set<String> = []
 

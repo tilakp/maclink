@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-/// Captures the selected message(s) in Mail.app (spec §7.3) — the
+/// Captures the selected message(s) in Mail.app (spec §7.3). The
 /// highest-value and most fragile integration per the spec, so the
 /// implementer notes there are followed closely:
 ///
@@ -12,7 +12,7 @@ import Foundation
 ///   adding window-enumeration logic Mail's own scripting dictionary makes
 ///   awkward.
 /// - `message id` is returned WITHOUT angle brackets on current macOS, but
-///   this has varied historically — normalize defensively in both
+///   this has varied historically. Normalize defensively in both
 ///   directions rather than assume either shape.
 /// - A tiny number of messages (drafts, some spam) have no Message-ID;
 ///   detect that and degrade rather than silently producing a broken link.
@@ -112,7 +112,7 @@ struct MailCapturer: Capturer {
     }
 
     /// Message-IDs have historically been returned with or without angle
-    /// brackets by Mail's AppleScript dictionary — always strip them so the
+    /// brackets by Mail's AppleScript dictionary. Always strip them so the
     /// stored form is consistent, and re-add them only when building a
     /// `message:` URL.
     static func normalizeMessageID(_ raw: String) -> String {
