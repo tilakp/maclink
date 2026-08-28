@@ -193,8 +193,23 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
     }
 
     @objc private func settingsTapped() {
+        openSettings()
+    }
+
+    /// Opens the Settings window. Also reachable via a global hotkey
+    /// (configurable, Settings > Hotkeys), independent of the status item
+    /// being clickable at all — a sufficiently crowded menu bar (or a
+    /// menu-bar-organizing tool like Ice or Bartender hiding new icons by
+    /// default) can leave the icon genuinely unreachable by mouse.
+    func openSettings() {
+        // Activation must land before the action is sent, or the Settings
+        // scene's command doesn't yet have a live window to target and the
+        // call silently does nothing — the same race `showSearchDropdown`
+        // works around by hopping a run loop tick before showing.
         NSApp.activate(ignoringOtherApps: true)
-        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        DispatchQueue.main.async {
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+        }
     }
 
     @objc private func quitTapped() {
