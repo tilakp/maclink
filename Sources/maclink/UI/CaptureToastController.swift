@@ -90,7 +90,15 @@ final class CaptureToastController {
             .filter { !$0.isEmpty }
         guard !tags.isEmpty else { return }
         for id in trackedRecordIDs {
-            try? LinkStore.shared.setTags(tags, for: id)
+            do {
+                try LinkStore.shared.setTags(tags, for: id)
+            } catch {
+                Log.db.error("failed to tag \(id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+                NotificationService.notifyFailure(
+                    title: "Couldn't save tags",
+                    body: "The link was captured, but its tags weren't saved."
+                )
+            }
         }
     }
 
@@ -98,7 +106,15 @@ final class CaptureToastController {
     /// (deduped) record predates this capture and undo must not touch it.
     private func undo() {
         for id in newRecordIDs {
-            try? LinkStore.shared.delete(id: id)
+            do {
+                try LinkStore.shared.delete(id: id)
+            } catch {
+                Log.db.error("undo failed to delete \(id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+                NotificationService.notifyFailure(
+                    title: "Couldn't undo the capture",
+                    body: "The link is still in your database. Delete it from the search dropdown instead."
+                )
+            }
         }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()

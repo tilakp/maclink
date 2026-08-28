@@ -164,19 +164,32 @@ private struct PermissionsSettingsView: View {
     private struct Row: Identifiable {
         let id: String
         let name: String
-        let status: () -> String
+        let status: String
         let fix: () -> Void
     }
 
+    /// Bundle ID to probe, or nil for the Accessibility row.
+    private static let integrations: [(id: String, name: String, bundleID: String?)] = [
+        ("finder", "Finder", "com.apple.finder"),
+        ("mail", "Mail", "com.apple.mail"),
+        ("safari", "Safari", "com.apple.Safari"),
+        ("ax", "Accessibility", nil)
+    ]
+
     @State private var refreshToken = UUID()
+    @State private var statuses: [String: String] = [:]
 
     private var rows: [Row] {
-        [
-            Row(id: "finder", name: "Finder", status: { PermissionsService.automationStatus(forBundleIdentifier: "com.apple.finder").rawValue }, fix: PermissionsService.openAutomationSettings),
-            Row(id: "mail", name: "Mail", status: { PermissionsService.automationStatus(forBundleIdentifier: "com.apple.mail").rawValue }, fix: PermissionsService.openAutomationSettings),
-            Row(id: "safari", name: "Safari", status: { PermissionsService.automationStatus(forBundleIdentifier: "com.apple.Safari").rawValue }, fix: PermissionsService.openAutomationSettings),
-            Row(id: "ax", name: "Accessibility", status: { PermissionsService.accessibilityGranted ? "Granted" : "Denied" }, fix: PermissionsService.openAccessibilitySettings)
-        ]
+        Self.integrations.map { integration in
+            Row(
+                id: integration.id,
+                name: integration.name,
+                status: statuses[integration.id] ?? "Checking…",
+                fix: integration.bundleID == nil
+                    ? PermissionsService.openAccessibilitySettings
+                    : PermissionsService.openAutomationSettings
+            )
+        }
     }
 
     var body: some View {
@@ -188,21 +201,40 @@ private struct PermissionsSettingsView: View {
             Table(rows) {
                 TableColumn("Integration") { Text($0.name) }
                 TableColumn("Status") { row in
-                    let value = row.status()
-                    Text(value)
-                        .foregroundStyle(value == "Granted" ? .green : (value == "Denied" ? .red : .secondary))
+                    Text(row.status)
+                        .foregroundStyle(row.status == "Granted" ? .green : (row.status == "Denied" ? .red : .secondary))
                 }
                 TableColumn("") { row in
                     Button("Open Settings…", action: row.fix)
                         .font(.caption)
                 }
             }
-            .id(refreshToken)
 
             Button("Refresh") { refreshToken = UUID() }
                 .font(.caption)
         }
         .padding(.top, 8)
+        // The automation probes must not run inline in `body`:
+        // AEDeterminePermissionToAutomateTarget is documented as possibly
+        // taking arbitrarily long, and this ran four of them on the main
+        // thread on every single render pass. Off the main thread, once per
+        // appearance or Refresh, with the result cached in `statuses`.
+        .task(id: refreshToken) {
+            let integrations = Self.integrations.map { (id: $0.id, bundleID: $0.bundleID) }
+            let probed = await Task.detached(priority: .userInitiated) { () -> [String: String] in
+                var result: [String: String] = [:]
+                for integration in integrations {
+                    if let bundleID = integration.bundleID {
+                        result[integration.id] = PermissionsService
+                            .automationStatus(forBundleIdentifier: bundleID).rawValue
+                    } else {
+                        result[integration.id] = PermissionsService.accessibilityGranted ? "Granted" : "Denied"
+                    }
+                }
+                return result
+            }.value
+            statuses = probed
+        }
     }
 }
 

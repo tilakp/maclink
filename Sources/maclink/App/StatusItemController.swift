@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import SwiftUI
 
 /// Owns the menu-bar icon: a classic `NSMenu` on click (spec §9.1) plus a
@@ -135,8 +136,10 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        menu.addItem(Self.item("Capture Link", key: "l", target: self, action: #selector(captureTapped)))
-        menu.addItem(Self.item("Search Links…", key: "k", target: self, action: #selector(searchTapped)))
+        // Built from the live bindings, not hardcoded: the menu used to keep
+        // advertising ⌃⌥⌘L / ⌃⌥⌘K after the user rebound (or cleared) them.
+        menu.addItem(Self.item("Capture Link", binding: HotkeySettings.capture, target: self, action: #selector(captureTapped)))
+        menu.addItem(Self.item("Search Links…", binding: HotkeySettings.search, target: self, action: #selector(searchTapped)))
 
         let pinItem = NSMenuItem(title: "Pin Search Window", action: #selector(togglePinTapped), keyEquivalent: "")
         pinItem.target = self
@@ -166,14 +169,32 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
         let settingsItem = NSMenuItem(title: "Settings…", action: #selector(settingsTapped), keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
-        menu.addItem(Self.item("Quit maclink", key: "q", target: self, action: #selector(quitTapped)))
+        // Plain ⌘Q. This shared the capture/search helper before, which
+        // advertised it as ⌃⌥⌘Q.
+        let quitItem = NSMenuItem(title: "Quit maclink", action: #selector(quitTapped), keyEquivalent: "q")
+        quitItem.target = self
+        menu.addItem(quitItem)
     }
 
-    private static func item(_ title: String, key: String, target: AnyObject, action: Selector) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
-        item.keyEquivalentModifierMask = [.control, .option, .command]
+    /// Menu item labelled with whatever global hotkey is currently bound to
+    /// the same action, or with no shortcut at all when it's been cleared.
+    private static func item(_ title: String, binding: HotkeyBinding?, target: AnyObject, action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = target
+        if let binding, let key = binding.display.last {
+            item.keyEquivalent = String(key).lowercased()
+            item.keyEquivalentModifierMask = modifierFlags(carbon: binding.modifiers)
+        }
         return item
+    }
+
+    private static func modifierFlags(carbon: Int) -> NSEvent.ModifierFlags {
+        var flags: NSEvent.ModifierFlags = []
+        if carbon & controlKey != 0 { flags.insert(.control) }
+        if carbon & optionKey != 0 { flags.insert(.option) }
+        if carbon & shiftKey != 0 { flags.insert(.shift) }
+        if carbon & cmdKey != 0 { flags.insert(.command) }
+        return flags
     }
 
     @objc private func captureTapped() {
