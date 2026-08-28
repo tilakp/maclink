@@ -3,6 +3,7 @@ final class ResolveEngine {
     static let shared = ResolveEngine()
 
     private let fileResolver = FileResolver()
+    private let mailResolver = MailResolver()
 
     private init() {}
 
@@ -13,7 +14,9 @@ final class ResolveEngine {
         switch record.payload {
         case .file:
             return try await fileResolver.resolve(record, reveal: reveal)
-        case .mail, .url, .generic:
+        case .mail:
+            return try await mailResolver.resolve(record, reveal: reveal)
+        case .url, .generic:
             throw ResolveError.notImplemented(record.resourceType)
         }
     }

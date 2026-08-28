@@ -4,6 +4,7 @@ enum ResolveError: Error {
     case notImplemented(ResourceType)
     case fileNotFound
     case bookmarkResolutionFailed
+    case noStableIdentifier
 }
 
 /// A per-resource-type strategy that brings the user back to a captured

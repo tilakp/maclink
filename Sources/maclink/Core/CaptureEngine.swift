@@ -7,7 +7,8 @@ final class CaptureEngine {
     static let shared = CaptureEngine()
 
     private let capturers: [Capturer] = [
-        FinderCapturer()
+        FinderCapturer(),
+        MailCapturer()
     ]
 
     private init() {}
