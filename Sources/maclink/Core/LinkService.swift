@@ -96,18 +96,26 @@ final class LinkService {
             return
         }
 
+        let previousClipboard = NSPasteboard.general.string(forType: .string)
+
         Task {
             do {
                 let resources = try await CaptureEngine.shared.capture(frontApp: frontApp)
                 var copiedURLs: [String] = []
+                var stored: [(record: LinkRecord, isNew: Bool)] = []
                 for resource in resources {
-                    let maclinkURL = try storeAndDedupe(resource)
-                    copiedURLs.append(maclinkURL)
+                    let result = try storeAndDedupe(resource)
+                    copiedURLs.append(result.maclinkURL)
+                    stored.append((result.record, result.isNew))
                 }
                 if !copiedURLs.isEmpty {
                     writeToClipboard(copiedURLs.joined(separator: "\n"))
                 }
                 recordDiagnostic("capture: \(resources.count) link(s) from \(frontApp.bundleIdentifier ?? "?")")
+                let finalStored = stored
+                await MainActor.run {
+                    CaptureToastController.shared.show(records: finalStored, previousClipboard: previousClipboard)
+                }
             } catch CaptureError.unsupportedApp(let bundleID) {
                 recordDiagnostic("capture: no capturer for \(bundleID) yet")
                 NotificationService.notifyFailure(
@@ -132,11 +140,11 @@ final class LinkService {
 
     /// Inserts a captured resource, or bumps the existing record if one
     /// already represents the same underlying resource (spec §8.5).
-    private func storeAndDedupe(_ resource: CapturedResource) throws -> String {
+    private func storeAndDedupe(_ resource: CapturedResource) throws -> (record: LinkRecord, isNew: Bool, maclinkURL: String) {
         if let existing = try store.findExisting(for: resource.payload) {
             try store.update(existing) // bumps updated_at
             recordDiagnostic("capture: existing link reused (\(existing.tags.count) tags)")
-            return "maclink://open/\(existing.id.uuidString)"
+            return (existing, false, "maclink://open/\(existing.id.uuidString)")
         }
         let record = LinkRecord(
             title: resource.title,
@@ -148,7 +156,7 @@ final class LinkService {
             captureMethod: resource.captureMethod
         )
         let inserted = try store.insert(record)
-        return "maclink://open/\(inserted.id.uuidString)"
+        return (inserted, true, "maclink://open/\(inserted.id.uuidString)")
     }
 
     func showSearchPanel() {
