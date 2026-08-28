@@ -5,29 +5,13 @@ struct MaclinkApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("maclink", systemImage: "link.badge.plus") {
-            MenuBarContentView()
+        // The menu-bar icon itself is a plain NSStatusItem (see
+        // StatusItemController), not SwiftUI's MenuBarExtra: the search
+        // dropdown needs to be shown programmatically from a global hotkey
+        // callback via NSPopover, which MenuBarExtra has no API for.
+        // Settings (build order step 12) will live in this scene.
+        Settings {
+            EmptyView()
         }
-    }
-}
-
-struct MenuBarContentView: View {
-    var body: some View {
-        Button("Capture Link") {
-            LinkService.shared.captureFromHotkey()
-        }
-        .keyboardShortcut("l", modifiers: [.control, .option, .command])
-
-        Button("Search Links…") {
-            LinkService.shared.showSearchPanel()
-        }
-        .keyboardShortcut("k", modifiers: [.control, .option, .command])
-
-        Divider()
-
-        Button("Quit maclink") {
-            NSApplication.shared.terminate(nil)
-        }
-        .keyboardShortcut("q", modifiers: [.command])
     }
 }

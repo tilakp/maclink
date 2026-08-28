@@ -15,7 +15,7 @@ final class LinkService {
 
         switch route {
         case .open(let id, let reveal):
-            openLink(id: id, reveal: reveal)
+            open(id: id, reveal: reveal)
         case .show(let id):
             recordDiagnostic("show id=\(id.uuidString)")
         case .search(let query):
@@ -28,7 +28,9 @@ final class LinkService {
         }
     }
 
-    private func openLink(id: UUID, reveal: Bool) {
+    /// Resolves and opens a link by id — the shared path for the
+    /// `maclink://open` URL route, the search dropdown, and the Recent menu.
+    func open(id: UUID, reveal: Bool = false) {
         guard let record = try? store.fetch(id: id) else {
             recordDiagnostic("open: no such link \(id.uuidString)")
             NotificationService.notifyFailure(
@@ -150,8 +152,19 @@ final class LinkService {
     }
 
     func showSearchPanel() {
-        Log.ui.info("search panel requested (not yet implemented)")
-        recordDiagnostic("search panel requested (stub)")
+        StatusItemController.shared.showSearchDropdown()
+    }
+
+    func search(_ query: String, limit: Int = 30) -> [LinkRecord] {
+        (try? store.search(query, limit: limit)) ?? []
+    }
+
+    func recent(limit: Int = 10) -> [LinkRecord] {
+        (try? store.fetchAll(limit: limit)) ?? []
+    }
+
+    func copyLinkToClipboard(_ record: LinkRecord) {
+        writeToClipboard("maclink://open/\(record.id.uuidString)")
     }
 
     private func writeToClipboard(_ string: String) {
