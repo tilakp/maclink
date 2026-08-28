@@ -61,12 +61,22 @@ final class MailCapturerTests: XCTestCase {
         ])
         let resources = MailCapturer.parseMessages(from: descriptor)
         XCTAssertEqual(resources.count, 1)
+        XCTAssertTrue(resources[0].degraded, "spec §7.3: a message with no Message-ID must be marked degraded")
         if case .mail(let payload) = resources[0].payload {
             XCTAssertTrue(payload.messageID.hasPrefix("unknown-"))
             XCTAssertNil(payload.messageURL)
         } else {
             XCTFail("expected mail payload")
         }
+    }
+
+    func testParseMessagesWithMessageIDIsNotDegraded() {
+        let descriptor = makeDescriptor(rows: [
+            ["abc123@example.com", "Q3 invoice", "Jane Doe <jane@example.com>", "INBOX", "Fastmail", ""]
+        ])
+        let resources = MailCapturer.parseMessages(from: descriptor)
+        XCTAssertEqual(resources.count, 1)
+        XCTAssertFalse(resources[0].degraded)
     }
 
     func testParseMessagesMultipleSelection() {

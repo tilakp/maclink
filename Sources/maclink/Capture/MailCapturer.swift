@@ -103,10 +103,10 @@ struct MailCapturer: Capturer {
                 subtitle: sender.isEmpty ? nil : sender,
                 sourceBundleID: "com.apple.mail",
                 sourceAppName: "Mail",
-                captureMethod: .applescript
+                captureMethod: .applescript,
+                degraded: degraded
             ))
             _ = dateString // reserved for date_sent/date_received parsing (Phase 2: needs locale-safe parsing)
-            _ = degraded
         }
         return resources
     }

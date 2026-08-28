@@ -69,10 +69,19 @@ final class LinkStore {
                 request = request.filter(LinkRecord.Columns.archived == false)
             }
             var records = try request.fetchAll(db)
-            for i in records.indices {
-                records[i].tags = try self.tags(for: records[i].id, db: db)
-            }
+            try self.hydrateTags(&records, db: db)
             return records
+        }
+    }
+
+    /// Row count only. Callers that just want "how many links do I have"
+    /// must not pay for fetching (and tag-hydrating) every row.
+    func count(includeArchived: Bool = false) throws -> Int {
+        try dbQueue.read { db in
+            let sql = includeArchived
+                ? "SELECT COUNT(*) FROM links"
+                : "SELECT COUNT(*) FROM links WHERE archived = 0"
+            return try Int.fetchOne(db, sql: sql) ?? 0
         }
     }
 
@@ -123,6 +132,36 @@ final class LinkStore {
             """, arguments: [linkID.uuidString.uppercased()])
     }
 
+    /// Hydrates `tags` on a whole result set with one query instead of one
+    /// per row. `fetchAll`/`search` return up to `limit` rows, and Settings
+    /// asks for 100k of them; a per-row round trip there is pathological.
+    private func hydrateTags(_ records: inout [LinkRecord], db: Database) throws {
+        guard !records.isEmpty else { return }
+        let keys = records.map { $0.id.uuidString.uppercased() }
+
+        var byLinkID: [String: [String]] = [:]
+        // Chunked so a large export can't blow SQLite's bound-variable limit.
+        for chunkStart in stride(from: 0, to: keys.count, by: 500) {
+            let chunk = Array(keys[chunkStart..<min(chunkStart + 500, keys.count)])
+            // Placeholders only; every value is still bound, never interpolated.
+            let placeholders = Array(repeating: "?", count: chunk.count).joined(separator: ",")
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT link_tags.link_id AS link_id, tags.name AS name FROM tags
+                JOIN link_tags ON link_tags.tag_id = tags.id
+                WHERE link_tags.link_id IN (\(placeholders))
+                ORDER BY tags.name
+                """, arguments: StatementArguments(chunk))
+            for row in rows {
+                let linkID: String = row["link_id"]
+                let name: String = row["name"]
+                byLinkID[linkID, default: []].append(name)
+            }
+        }
+        for i in records.indices {
+            records[i].tags = byLinkID[keys[i]] ?? []
+        }
+    }
+
     func setTags(_ names: [String], for linkID: UUID, db: Database) throws {
         try db.execute(sql: "DELETE FROM link_tags WHERE link_id = ?", arguments: [linkID.uuidString.uppercased()])
         for name in names {
@@ -148,6 +187,22 @@ final class LinkStore {
 
     // MARK: - Search
 
+    /// `%` and `_` are wildcards inside a `LIKE` pattern, so a query
+    /// containing either (a filename like `report_final.pdf`, or a bare `%`)
+    /// silently matched far more than the user typed. Escape them, plus the
+    /// escape character itself, and pair this with `ESCAPE '\'` in the SQL.
+    static func escapedForLike(_ query: String) -> String {
+        var out = ""
+        out.reserveCapacity(query.count)
+        for character in query {
+            if character == "\\" || character == "%" || character == "_" {
+                out.append("\\")
+            }
+            out.append(character)
+        }
+        return out
+    }
+
     func search(_ query: String, limit: Int = 100) throws -> [LinkRecord] {
         try dbQueue.read { db in
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -158,23 +213,21 @@ final class LinkStore {
                     ORDER BY created_at DESC LIMIT ?
                     """, arguments: [limit])
             } else {
-                let like = "%\(trimmed)%"
+                let like = "%\(Self.escapedForLike(trimmed))%"
                 records = try LinkRecord.fetchAll(db, sql: """
                     SELECT DISTINCT links.* FROM links
                     LEFT JOIN link_tags ON link_tags.link_id = links.id
                     LEFT JOIN tags ON tags.id = link_tags.tag_id
                     WHERE links.archived = 0 AND (
-                        links.title LIKE ? OR links.subtitle LIKE ? OR
-                        links.notes LIKE ? OR links.payload LIKE ? OR
-                        tags.name LIKE ?
+                        links.title LIKE ? ESCAPE '\\' OR links.subtitle LIKE ? ESCAPE '\\' OR
+                        links.notes LIKE ? ESCAPE '\\' OR links.payload LIKE ? ESCAPE '\\' OR
+                        tags.name LIKE ? ESCAPE '\\'
                     )
                     ORDER BY links.created_at DESC
                     LIMIT ?
                     """, arguments: [like, like, like, like, like, limit])
             }
-            for i in records.indices {
-                records[i].tags = try self.tags(for: records[i].id, db: db)
-            }
+            try self.hydrateTags(&records, db: db)
             return records
         }
     }

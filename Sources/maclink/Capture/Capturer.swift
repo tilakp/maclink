@@ -18,6 +18,10 @@ struct CapturedResource {
     var sourceBundleID: String
     var sourceAppName: String
     var captureMethod: CaptureMethod
+    /// True when the capturer couldn't get the ideal identifier and the
+    /// record is a breadcrumb rather than something reliably re-openable
+    /// (spec §7.3, §8.2 `degraded`).
+    var degraded: Bool = false
 }
 
 /// A per-app capture strategy (spec §7). `supportedBundleIDs` is how

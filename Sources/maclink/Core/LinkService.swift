@@ -161,7 +161,8 @@ final class LinkService {
             bookmarkData: resource.bookmarkData,
             sourceBundleID: resource.sourceBundleID,
             sourceAppName: resource.sourceAppName,
-            captureMethod: resource.captureMethod
+            captureMethod: resource.captureMethod,
+            degraded: resource.degraded
         )
         let inserted = try store.insert(record)
         return (inserted, true, "maclink://open/\(inserted.id.uuidString)")
@@ -172,11 +173,23 @@ final class LinkService {
     }
 
     func search(_ query: String, limit: Int = 30) -> [LinkRecord] {
-        (try? store.search(query, limit: limit)) ?? []
+        do {
+            return try store.search(query, limit: limit)
+        } catch {
+            // An empty list and a failed query used to be indistinguishable
+            // ("No matches" either way). At least leave a trace.
+            Log.db.error("search failed: \(String(describing: error), privacy: .public)")
+            return []
+        }
     }
 
     func recent(limit: Int = 10) -> [LinkRecord] {
-        (try? store.fetchAll(limit: limit)) ?? []
+        do {
+            return try store.fetchAll(limit: limit)
+        } catch {
+            Log.db.error("recent failed: \(String(describing: error), privacy: .public)")
+            return []
+        }
     }
 
     func copyLinkToClipboard(_ record: LinkRecord) {
@@ -185,12 +198,30 @@ final class LinkService {
 
     /// Hides the link from search/recent without losing it. Reversible.
     func archive(_ record: LinkRecord) {
-        try? store.setArchived(true, id: record.id)
+        do {
+            try store.setArchived(true, id: record.id)
+        } catch {
+            // The row stays visible after the list refreshes, which looks
+            // exactly like the keystroke never registered. Say so instead.
+            recordDiagnostic("archive failed for \(record.id.uuidString): \(error)")
+            NotificationService.notifyFailure(
+                title: "Couldn't archive \"\(record.title)\"",
+                body: Self.friendlyMessage(for: error, sourceAppName: record.sourceAppName)
+            )
+        }
     }
 
     /// Permanently removes the link. Not reversible.
     func delete(_ record: LinkRecord) {
-        try? store.delete(id: record.id)
+        do {
+            try store.delete(id: record.id)
+        } catch {
+            recordDiagnostic("delete failed for \(record.id.uuidString): \(error)")
+            NotificationService.notifyFailure(
+                title: "Couldn't delete \"\(record.title)\"",
+                body: Self.friendlyMessage(for: error, sourceAppName: record.sourceAppName)
+            )
+        }
     }
 
     private func writeToClipboard(_ string: String) {
