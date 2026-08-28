@@ -4,19 +4,56 @@ import Foundation
 /// Global hotkeys via Carbon `RegisterEventHotKey` (spec §3.1, §4.2).
 /// Deliberately not `NSEvent.addGlobalMonitorForEvents`, which requires
 /// Accessibility permission just to observe keystrokes — this needs none.
+/// Bindings are user-configurable (persisted in `HotkeySettings`, `nil`
+/// meaning "no hotkey assigned") and can be changed at runtime from the
+/// Settings window.
 final class HotkeyService {
     static let shared = HotkeyService()
 
-    private var hotKeyRefs: [EventHotKeyRef] = []
+    private var hotKeyRefs: [String: EventHotKeyRef] = [:]
     private var handlers: [UInt32: () -> Void] = [:]
+    private var idsByName: [String: UInt32] = [:]
     private var nextID: UInt32 = 1
-    private var started = false
+    private var eventHandlerInstalled = false
 
     private init() {}
 
     func start() {
-        guard !started else { return }
-        started = true
+        installEventHandlerIfNeeded()
+        _ = apply(name: "capture", binding: HotkeySettings.capture) {
+            LinkService.shared.captureFromHotkey()
+        }
+        _ = apply(name: "search", binding: HotkeySettings.search) {
+            LinkService.shared.showSearchPanel()
+        }
+        Log.app.info("global hotkeys registered")
+    }
+
+    /// Re-registers the capture hotkey to a new binding (or clears it, for
+    /// `nil`) and persists the result. Returns false without changing
+    /// anything if a non-nil binding couldn't be registered — most
+    /// commonly because another app already owns it.
+    @discardableResult
+    func updateCapture(_ binding: HotkeyBinding?) -> Bool {
+        guard apply(name: "capture", binding: binding, handler: { LinkService.shared.captureFromHotkey() }) else {
+            return false
+        }
+        HotkeySettings.capture = binding
+        return true
+    }
+
+    @discardableResult
+    func updateSearch(_ binding: HotkeyBinding?) -> Bool {
+        guard apply(name: "search", binding: binding, handler: { LinkService.shared.showSearchPanel() }) else {
+            return false
+        }
+        HotkeySettings.search = binding
+        return true
+    }
+
+    private func installEventHandlerIfNeeded() {
+        guard !eventHandlerInstalled else { return }
+        eventHandlerInstalled = true
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
@@ -39,40 +76,51 @@ final class HotkeyService {
             Unmanaged.passUnretained(self).toOpaque(),
             nil
         )
-
-        register(keyCode: kVK_ANSI_L, modifiers: [.control, .option, .command]) {
-            LinkService.shared.captureFromHotkey()
-        }
-        register(keyCode: kVK_ANSI_K, modifiers: [.control, .option, .command]) {
-            LinkService.shared.showSearchPanel()
-        }
-        Log.app.info("global hotkeys registered")
     }
 
-    struct Modifiers: OptionSet {
-        let rawValue: Int
-        static let control = Modifiers(rawValue: controlKey)
-        static let option = Modifiers(rawValue: optionKey)
-        static let command = Modifiers(rawValue: cmdKey)
-        static let shift = Modifiers(rawValue: shiftKey)
-    }
+    /// Registers `binding` under `name`, unregistering whatever was there
+    /// before. `binding == nil` clears the hotkey entirely and always
+    /// succeeds. On failure to register a non-nil binding, the previous
+    /// binding for `name` is left intact.
+    @discardableResult
+    private func apply(name: String, binding: HotkeyBinding?, handler: @escaping () -> Void) -> Bool {
+        guard let binding else {
+            if let oldRef = hotKeyRefs[name] {
+                UnregisterEventHotKey(oldRef)
+                hotKeyRefs.removeValue(forKey: name)
+            }
+            if let id = idsByName[name] {
+                handlers.removeValue(forKey: id)
+            }
+            return true
+        }
 
-    private func register(keyCode: Int, modifiers: Modifiers, handler: @escaping () -> Void) {
-        let id = nextID
-        nextID += 1
-        handlers[id] = handler
+        let id = idsByName[name] ?? {
+            let newID = nextID
+            nextID += 1
+            idsByName[name] = newID
+            return newID
+        }()
 
+        var newRef: EventHotKeyRef?
         let hotKeyID = EventHotKeyID(signature: Self.signature, id: id)
-        var hotKeyRef: EventHotKeyRef?
         let status = RegisterEventHotKey(
-            UInt32(keyCode), UInt32(modifiers.rawValue), hotKeyID,
-            GetApplicationEventTarget(), 0, &hotKeyRef
+            UInt32(binding.keyCode), UInt32(binding.modifiers), hotKeyID,
+            GetApplicationEventTarget(), 0, &newRef
         )
-        if status == noErr, let hotKeyRef {
-            hotKeyRefs.append(hotKeyRef)
-        } else {
-            Log.app.error("failed to register hotkey id=\(id, privacy: .public) status=\(status, privacy: .public)")
+        guard status == noErr, let newRef else {
+            Log.app.error("failed to register hotkey '\(name, privacy: .public)' status=\(status, privacy: .public)")
+            return false
         }
+
+        // Only unregister the old one after the new one succeeds, so a
+        // failed rebind doesn't leave the user with no hotkey at all.
+        if let oldRef = hotKeyRefs[name] {
+            UnregisterEventHotKey(oldRef)
+        }
+        hotKeyRefs[name] = newRef
+        handlers[id] = handler
+        return true
     }
 
     private static let signature: FourCharCode = {

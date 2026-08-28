@@ -11,7 +11,7 @@ struct MaclinkApp: App {
         // callback via NSPopover, which MenuBarExtra has no API for.
         // Settings (build order step 12) will live in this scene.
         Settings {
-            EmptyView()
+            SettingsView()
         }
     }
 }

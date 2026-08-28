@@ -105,7 +105,7 @@ final class LinkService {
                 var stored: [(record: LinkRecord, isNew: Bool)] = []
                 for resource in resources {
                     let result = try storeAndDedupe(resource)
-                    copiedURLs.append(result.maclinkURL)
+                    copiedURLs.append(Self.formatClipboardEntry(url: result.maclinkURL, title: result.record.title))
                     stored.append((result.record, result.isNew))
                 }
                 if !copiedURLs.isEmpty {
@@ -135,6 +135,14 @@ final class LinkService {
                     body: Self.friendlyMessage(for: error, sourceAppName: frontApp.localizedName)
                 )
             }
+        }
+    }
+
+    private static func formatClipboardEntry(url: String, title: String) -> String {
+        switch UserDefaults.standard.string(forKey: "clipboardFormat").flatMap(ClipboardFormat.init) ?? .raw {
+        case .raw: return url
+        case .org: return "[[\(url)][\(title)]]"
+        case .markdown: return "[\(title)](\(url))"
         }
     }
 

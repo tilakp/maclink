@@ -132,6 +132,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
         }
         menu.addItem(.separator())
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(settingsTapped), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
         menu.addItem(Self.item("Quit maclink", key: "q", target: self, action: #selector(quitTapped)))
     }
 
@@ -158,6 +161,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         } else {
             LinkService.shared.open(id: id)
         }
+    }
+
+    @objc private func settingsTapped() {
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
     }
 
     @objc private func quitTapped() {
