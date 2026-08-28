@@ -6,6 +6,7 @@ enum ResolveError: Error {
     case bookmarkResolutionFailed
     case noStableIdentifier
     case malformedURL
+    case appNotInstalled
 }
 
 /// A per-resource-type strategy that brings the user back to a captured

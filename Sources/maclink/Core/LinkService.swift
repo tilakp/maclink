@@ -72,6 +72,12 @@ final class LinkService {
             return "The file couldn't be found at its last known location."
         case ResolveError.noStableIdentifier:
             return "This item has no reliable identifier and can't be reopened."
+        case ResolveError.appNotInstalled:
+            return "\(app) doesn't appear to be installed."
+        case ResolveError.malformedURL:
+            return "The stored link is malformed."
+        case CaptureError.accessibilityPermissionDenied:
+            return "maclink needs Accessibility permission. Check System Settings > Privacy & Security > Accessibility."
         default:
             return "Something went wrong: \(String(describing: error))"
         }

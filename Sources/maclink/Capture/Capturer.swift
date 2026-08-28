@@ -4,6 +4,7 @@ enum CaptureError: Error {
     case unsupportedApp(String)
     case noSelection
     case malformedCapture(String)
+    case accessibilityPermissionDenied
 }
 
 /// One resource pulled out of a `Capturer`, before it becomes a `LinkRecord`

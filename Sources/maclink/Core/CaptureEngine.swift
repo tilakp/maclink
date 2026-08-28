@@ -11,16 +11,21 @@ final class CaptureEngine {
         MailCapturer(),
         SafariCapturer()
     ]
+    private let genericCapturer = GenericCapturer()
 
     private init() {}
 
+    /// Routes to the bundle-ID-matched capturer; falls back to the generic
+    /// AX capturer on any failure or if the app is unregistered (spec §4.2).
     func capture(frontApp: NSRunningApplication) async throws -> [CapturedResource] {
-        guard let bundleID = frontApp.bundleIdentifier else {
-            throw CaptureError.unsupportedApp("<no bundle id>")
+        if let bundleID = frontApp.bundleIdentifier,
+           let capturer = capturers.first(where: { $0.supportedBundleIDs.contains(bundleID) }) {
+            do {
+                return try await capturer.capture(frontApp: frontApp)
+            } catch {
+                Log.capture.info("specific capturer failed (\(String(describing: error), privacy: .public)), falling back to generic")
+            }
         }
-        guard let capturer = capturers.first(where: { $0.supportedBundleIDs.contains(bundleID) }) else {
-            throw CaptureError.unsupportedApp(bundleID)
-        }
-        return try await capturer.capture(frontApp: frontApp)
+        return try await genericCapturer.capture(frontApp: frontApp)
     }
 }
