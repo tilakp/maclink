@@ -207,7 +207,9 @@ private struct PermissionsSettingsView: View {
 }
 
 private struct DataSettingsView: View {
-    @State private var linkCount: Int = (try? LinkStore.shared.fetchAll(includeArchived: true, limit: 100_000))?.count ?? 0
+    // A COUNT(*), not a full fetch: the old version loaded every row (and
+    // ran a tag query per row) just to render one number.
+    @State private var linkCount: Int = (try? LinkStore.shared.count(includeArchived: true)) ?? 0
 
     var body: some View {
         Form {
@@ -231,6 +233,10 @@ private struct DataSettingsView: View {
             }
         }
         .padding(.top, 8)
+        // The @State initializer only runs the first time this view is
+        // created, so without this the count went stale as soon as anything
+        // was captured or deleted while the app kept running.
+        .onAppear { linkCount = (try? LinkStore.shared.count(includeArchived: true)) ?? 0 }
     }
 
     private func exportJSON() {

@@ -64,6 +64,46 @@ final class LinkStoreTests: XCTestCase {
         XCTAssertEqual(try store.search("").count, 2) // empty query = recent
     }
 
+    func testSearchTreatsLikeWildcardsAsLiteralText() throws {
+        try store.insert(mailRecord(subject: "report_final", messageID: "1@example.com", tags: []))
+        try store.insert(mailRecord(subject: "reportXfinal", messageID: "2@example.com", tags: []))
+        try store.insert(mailRecord(subject: "100% done", messageID: "3@example.com", tags: []))
+        try store.insert(mailRecord(subject: "nothing to do with it", messageID: "4@example.com", tags: []))
+
+        // `_` must match a literal underscore, not "any character".
+        let underscore = try store.search("report_final")
+        XCTAssertEqual(underscore.map(\.title), ["report_final"])
+
+        // A bare `%` must match only rows that literally contain one,
+        // not every row in the database.
+        XCTAssertEqual(try store.search("%").map(\.title), ["100% done"])
+
+        // And a backslash must not smuggle in an escape of its own.
+        XCTAssertEqual(try store.search("\\").count, 0)
+    }
+
+    func testSearchHydratesTagsForEveryResult() throws {
+        try store.insert(mailRecord(subject: "First", messageID: "1@example.com", tags: ["alpha"]))
+        try store.insert(mailRecord(subject: "Second", messageID: "2@example.com", tags: ["beta", "gamma"]))
+        try store.insert(mailRecord(subject: "Third", messageID: "3@example.com", tags: []))
+
+        let results = try store.search("Jane Doe")
+        XCTAssertEqual(results.count, 3)
+        let tagsByTitle = Dictionary(uniqueKeysWithValues: results.map { ($0.title, Set($0.tags)) })
+        XCTAssertEqual(tagsByTitle["First"], ["alpha"])
+        XCTAssertEqual(tagsByTitle["Second"], ["beta", "gamma"])
+        XCTAssertEqual(tagsByTitle["Third"], [])
+    }
+
+    func testCountMatchesFetchAll() throws {
+        try store.insert(mailRecord(subject: "One", messageID: "1@example.com"))
+        let archived = try store.insert(mailRecord(subject: "Two", messageID: "2@example.com"))
+        try store.setArchived(true, id: archived.id)
+
+        XCTAssertEqual(try store.count(), 1)
+        XCTAssertEqual(try store.count(includeArchived: true), 2)
+    }
+
     func testDedupeByMessageID() throws {
         let original = try store.insert(mailRecord(messageID: "dupe@example.com"))
         let payload = MailPayload(messageID: "dupe@example.com", subject: "Different subject now")
