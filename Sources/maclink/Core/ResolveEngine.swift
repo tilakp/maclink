@@ -4,6 +4,7 @@ final class ResolveEngine {
 
     private let fileResolver = FileResolver()
     private let mailResolver = MailResolver()
+    private let urlResolver = URLResolver()
 
     private init() {}
 
@@ -16,7 +17,9 @@ final class ResolveEngine {
             return try await fileResolver.resolve(record, reveal: reveal)
         case .mail:
             return try await mailResolver.resolve(record, reveal: reveal)
-        case .url, .generic:
+        case .url:
+            return try await urlResolver.resolve(record, reveal: reveal)
+        case .generic:
             throw ResolveError.notImplemented(record.resourceType)
         }
     }

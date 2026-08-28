@@ -8,7 +8,8 @@ final class CaptureEngine {
 
     private let capturers: [Capturer] = [
         FinderCapturer(),
-        MailCapturer()
+        MailCapturer(),
+        SafariCapturer()
     ]
 
     private init() {}
