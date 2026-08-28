@@ -53,13 +53,12 @@ final class HotkeyService {
 
     private func installEventHandlerIfNeeded() {
         guard !eventHandlerInstalled else { return }
-        eventHandlerInstalled = true
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: OSType(kEventHotKeyPressed)
         )
-        InstallEventHandler(
+        let status = InstallEventHandler(
             GetApplicationEventTarget(),
             { _, event, userData -> OSStatus in
                 guard let event, let userData else { return noErr }
@@ -76,6 +75,14 @@ final class HotkeyService {
             Unmanaged.passUnretained(self).toOpaque(),
             nil
         )
+        // Flag was set before the call before this, so a failed install was
+        // both unlogged and never retried: every hotkey would register with
+        // Carbon and then quietly never fire.
+        guard status == noErr else {
+            Log.app.error("failed to install the hotkey event handler status=\(status, privacy: .public)")
+            return
+        }
+        eventHandlerInstalled = true
     }
 
     /// Registers `binding` under `name`, unregistering whatever was there

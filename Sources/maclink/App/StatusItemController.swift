@@ -77,6 +77,11 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
         // the popover can appear detached from the status item. Hence the
         // hop to the next run loop tick rather than showing inline.
         NSApp.activate(ignoringOtherApps: true)
+        // Re-assert the behavior at show time. `didSet` on `isPinned` only
+        // fires when the value actually changes, and AppKit reads this when
+        // the popover is shown, so the two could disagree for a whole
+        // showing otherwise.
+        popover.behavior = isPinned ? .applicationDefined : .transient
         DispatchQueue.main.async {
             if let windowFrame = button.window?.frame, Self.isOnScreen(windowFrame.origin) {
                 popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
