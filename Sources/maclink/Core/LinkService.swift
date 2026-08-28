@@ -183,6 +183,16 @@ final class LinkService {
         writeToClipboard("maclink://open/\(record.id.uuidString)")
     }
 
+    /// Hides the link from search/recent without losing it. Reversible.
+    func archive(_ record: LinkRecord) {
+        try? store.setArchived(true, id: record.id)
+    }
+
+    /// Permanently removes the link. Not reversible.
+    func delete(_ record: LinkRecord) {
+        try? store.delete(id: record.id)
+    }
+
     private func writeToClipboard(_ string: String) {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()

@@ -82,6 +82,17 @@ final class LinkStore {
         }
     }
 
+    /// Soft delete: hides the link from `fetchAll`/`search` without losing
+    /// it, so it can be restored later. `delete(id:)` above is permanent.
+    func setArchived(_ archived: Bool, id: UUID) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE links SET archived = ?, updated_at = ? WHERE id = ?",
+                arguments: [archived, Date().timeIntervalSince1970, id.uuidString.uppercased()]
+            )
+        }
+    }
+
     func recordOpened(id: UUID) throws {
         try dbQueue.write { db in
             try db.execute(

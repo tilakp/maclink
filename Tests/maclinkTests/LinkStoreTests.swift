@@ -111,6 +111,19 @@ final class LinkStoreTests: XCTestCase {
         XCTAssertNil(try store.fetch(id: record.id))
     }
 
+    func testSetArchivedHidesFromDefaultFetchAndSearchButNotFromFetch() throws {
+        let record = try store.insert(mailRecord())
+        try store.setArchived(true, id: record.id)
+
+        XCTAssertNotNil(try store.fetch(id: record.id), "archiving must not delete the row")
+        XCTAssertFalse(try store.fetchAll().contains { $0.id == record.id })
+        XCTAssertTrue(try store.fetchAll(includeArchived: true).contains { $0.id == record.id })
+        XCTAssertFalse(try store.search("invoice").contains { $0.id == record.id })
+
+        try store.setArchived(false, id: record.id)
+        XCTAssertTrue(try store.fetchAll().contains { $0.id == record.id }, "un-archiving must restore visibility")
+    }
+
     func testRecordOpenedBumpsOpenCountAndLastOpenedAt() throws {
         let record = try store.insert(mailRecord())
         XCTAssertEqual(record.openCount, 0)

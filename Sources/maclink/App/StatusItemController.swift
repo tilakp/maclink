@@ -52,6 +52,12 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
             onReveal: { [weak self] record in
                 LinkService.shared.open(id: record.id, reveal: true)
                 if self?.isPinned != true { self?.closeSearchDropdown() }
+            },
+            onArchive: { record in
+                LinkService.shared.archive(record)
+            },
+            onDelete: { record in
+                LinkService.shared.delete(record)
             }
         ))
         self.popover = popover
@@ -196,15 +202,16 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
         openSettings()
     }
 
-    /// Opens the Settings window. Also reachable via a global hotkey
-    /// (configurable, Settings > Hotkeys), independent of the status item
-    /// being clickable at all — a sufficiently crowded menu bar (or a
-    /// menu-bar-organizing tool like Ice or Bartender hiding new icons by
-    /// default) can leave the icon genuinely unreachable by mouse.
+    /// Opens the Settings window. Only reachable through this status item's
+    /// menu right now. A menu-bar-organizing tool like Ice or Bartender
+    /// hiding the icon by default (as seen live on this machine) can make
+    /// it genuinely unclickable; a global-hotkey fallback was considered
+    /// and explicitly declined in favor of fixing the icon's visibility
+    /// directly in the organizing tool.
     func openSettings() {
         // Activation must land before the action is sent, or the Settings
         // scene's command doesn't yet have a live window to target and the
-        // call silently does nothing — the same race `showSearchDropdown`
+        // call silently does nothing. Same race `showSearchDropdown`
         // works around by hopping a run loop tick before showing.
         NSApp.activate(ignoringOtherApps: true)
         DispatchQueue.main.async {

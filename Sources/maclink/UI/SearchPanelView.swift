@@ -15,10 +15,13 @@ struct SearchPanelView: View {
     var onSelect: (LinkRecord) -> Void
     var onCopy: (LinkRecord) -> Void
     var onReveal: (LinkRecord) -> Void
+    var onArchive: (LinkRecord) -> Void
+    var onDelete: (LinkRecord) -> Void
 
     @State private var query = ""
     @State private var results: [LinkRecord] = []
     @State private var selectedIndex = 0
+    @State private var pendingDelete: LinkRecord?
     @FocusState private var searchFieldFocused: Bool
 
     var body: some View {
@@ -37,6 +40,14 @@ struct SearchPanelView: View {
                                 copySelected()
                             } else {
                                 openSelected()
+                            }
+                            return .handled
+                        case .delete:
+                            guard press.modifiers.contains(.command) else { return .ignored }
+                            if press.modifiers.contains(.shift) {
+                                requestDeleteSelected()
+                            } else {
+                                archiveSelected()
                             }
                             return .handled
                         case .escape:
@@ -91,6 +102,14 @@ struct SearchPanelView: View {
                                         if case .file = record.payload {
                                             Button("Reveal in Finder") { onReveal(record) }
                                         }
+                                        Divider()
+                                        Button("Archive") {
+                                            onArchive(record)
+                                            refresh()
+                                        }
+                                        Button("Delete…", role: .destructive) {
+                                            pendingDelete = record
+                                        }
                                     }
                             }
                         }
@@ -111,10 +130,25 @@ struct SearchPanelView: View {
             selectedIndex = 0
             refresh()
         }
+        .alert(
+            "Delete this link?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            presenting: pendingDelete
+        ) { record in
+            Button("Delete", role: .destructive) {
+                onDelete(record)
+                pendingDelete = nil
+                refresh()
+            }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { record in
+            Text("\u{201C}\(record.title)\u{201D} will be permanently removed. This can't be undone. Use Archive (\u{2318}\u{232B}) instead if you just want it out of search.")
+        }
     }
 
     private func refresh() {
         results = LinkService.shared.search(query)
+        selectedIndex = min(selectedIndex, max(0, results.count - 1))
     }
 
     private func move(_ delta: Int) {
@@ -130,6 +164,17 @@ struct SearchPanelView: View {
     private func copySelected() {
         guard results.indices.contains(selectedIndex) else { return }
         onCopy(results[selectedIndex])
+    }
+
+    private func archiveSelected() {
+        guard results.indices.contains(selectedIndex) else { return }
+        onArchive(results[selectedIndex])
+        refresh()
+    }
+
+    private func requestDeleteSelected() {
+        guard results.indices.contains(selectedIndex) else { return }
+        pendingDelete = results[selectedIndex]
     }
 }
 
