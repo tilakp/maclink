@@ -56,20 +56,30 @@ final class AutomationService: @unchecked Sendable {
             return .failure(error)
         case .success(let script):
             let semaphore = DispatchSemaphore(value: 0)
-            var errorDict: NSDictionary?
-            var resultDescriptor: NSAppleEventDescriptor?
+            let box = ExecutionBox()
 
             let thread = Thread {
-                resultDescriptor = script.executeAndReturnError(&errorDict)
+                var threadErrorDict: NSDictionary?
+                let descriptor: NSAppleEventDescriptor? = script.executeAndReturnError(&threadErrorDict)
+                box.finish(result: descriptor, errorDict: threadErrorDict)
                 semaphore.signal()
             }
             thread.stackSize = 1 << 20
             thread.start()
 
             if semaphore.wait(timeout: .now() + timeout) == .timedOut {
+                // The in-flight Apple Event can't be cancelled, so that
+                // thread is still sitting inside `executeAndReturnError`
+                // and still owns `script`. Evict it from the cache: handing
+                // the same NSAppleScript to the next call would put two
+                // threads inside one object that is explicitly not
+                // thread-safe. The orphan keeps the instance alive via its
+                // own capture and its result is simply dropped.
+                compiledCache.removeValue(forKey: source)
                 Log.automation.error("automation call timed out after \(timeout, format: .fixed(precision: 1))s (may still complete in the background)")
                 return .failure(AutomationError.timeout)
             }
+            let (resultDescriptor, errorDict) = box.take()
             if let errorDict {
                 let mapped = Self.mapError(errorDict)
                 Log.automation.error("automation error: \(String(describing: mapped), privacy: .public)")
@@ -79,6 +89,31 @@ final class AutomationService: @unchecked Sendable {
                 return .failure(AutomationError.malformedResult)
             }
             return .success(resultDescriptor)
+        }
+    }
+
+    /// Carries an execution's outcome back from the throwaway thread. It has
+    /// to be a lock-guarded heap box rather than plain captured `var`s: on
+    /// timeout the caller walks away while that thread is still running, and
+    /// it will write its result here afterwards. Two threads touching the
+    /// same unsynchronized variables is a data race even when the reader has
+    /// already given up on the value.
+    private final class ExecutionBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var result: NSAppleEventDescriptor?
+        private var errorDict: NSDictionary?
+
+        func finish(result: NSAppleEventDescriptor?, errorDict: NSDictionary?) {
+            lock.lock()
+            defer { lock.unlock() }
+            self.result = result
+            self.errorDict = errorDict
+        }
+
+        func take() -> (NSAppleEventDescriptor?, NSDictionary?) {
+            lock.lock()
+            defer { lock.unlock() }
+            return (result, errorDict)
         }
     }
 
