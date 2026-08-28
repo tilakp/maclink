@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        HotkeyService.shared.start()
         Log.app.info("maclink ready")
     }
 
