@@ -64,6 +64,17 @@ final class LinkStoreTests: XCTestCase {
         XCTAssertEqual(try store.search("").count, 2) // empty query = recent
     }
 
+    func testDegradedFlagRoundTrips() throws {
+        let record = LinkRecord(
+            title: "Draft without an ID",
+            payload: .mail(MailPayload(messageID: "unknown-x", subject: "Draft without an ID")),
+            captureMethod: .applescript,
+            degraded: true
+        )
+        let inserted = try store.insert(record)
+        XCTAssertEqual(try store.fetch(id: inserted.id)?.degraded, true)
+    }
+
     func testSearchTreatsLikeWildcardsAsLiteralText() throws {
         try store.insert(mailRecord(subject: "report_final", messageID: "1@example.com", tags: []))
         try store.insert(mailRecord(subject: "reportXfinal", messageID: "2@example.com", tags: []))

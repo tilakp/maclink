@@ -21,11 +21,17 @@ struct FileResolver: Resolver {
                 bookmarkDataIsStale: &stale
             ), FileManager.default.fileExists(atPath: url.path) {
                 resolvedURL = url
-                if stale {
-                    // Step 1: silently regenerate and persist the repaired bookmark.
-                    Log.resolve.info("bookmark stale for \(record.id.uuidString, privacy: .public), regenerating")
+                // Step 1: silently regenerate and persist the repair. The
+                // bookmark being stale is one trigger; the other is the file
+                // having simply moved, which resolves cleanly with
+                // `stale == false` and used to leave a wrong `path` (and a
+                // wrong subtitle, and a dedupe key that no longer matches)
+                // in the database forever.
+                let moved = url.path != payload.path
+                if stale || moved {
+                    Log.resolve.info("repairing file link \(record.id.uuidString, privacy: .public) (stale=\(stale, privacy: .public) moved=\(moved, privacy: .public))")
                     var repaired = record
-                    if let freshData = try? url.bookmarkData(
+                    if stale, let freshData = try? url.bookmarkData(
                         options: [], includingResourceValuesForKeys: [.nameKey, .contentTypeKey], relativeTo: nil
                     ) {
                         repaired.bookmarkData = freshData
@@ -34,6 +40,7 @@ struct FileResolver: Resolver {
                     repairedPayload.path = url.path
                     repairedPayload.displayName = url.lastPathComponent
                     repaired.payload = .file(repairedPayload)
+                    repaired.subtitle = url.deletingLastPathComponent().path
                     repaired.repairedAt = Date()
                     updatedRecord = repaired
                 }

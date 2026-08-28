@@ -161,7 +161,8 @@ final class LinkService {
             bookmarkData: resource.bookmarkData,
             sourceBundleID: resource.sourceBundleID,
             sourceAppName: resource.sourceAppName,
-            captureMethod: resource.captureMethod
+            captureMethod: resource.captureMethod,
+            degraded: resource.degraded
         )
         let inserted = try store.insert(record)
         return (inserted, true, "maclink://open/\(inserted.id.uuidString)")
