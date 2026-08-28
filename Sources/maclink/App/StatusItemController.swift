@@ -4,8 +4,19 @@ import SwiftUI
 /// Owns the menu-bar icon: a classic `NSMenu` on click (spec §9.1) plus a
 /// separate `NSPopover` "dropdown" for search, shown by the ⌃⌥⌘K hotkey
 /// (OQ-3: dropdown chosen over a floating Spotlight-style panel).
-final class StatusItemController: NSObject, NSMenuDelegate {
+final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
     static let shared = StatusItemController()
+
+    /// When pinned, opening or copying a link leaves the dropdown open so
+    /// several links can be acted on in one sitting. Flipping this also
+    /// switches the popover away from `.transient`, since that behavior
+    /// auto-dismisses as soon as an opened link steals key window status
+    /// (e.g. Mail or Safari activating), which would defeat pinning even
+    /// with the explicit close calls below removed.
+    var isPinned: Bool = false {
+        willSet { objectWillChange.send() }
+        didSet { popover?.behavior = isPinned ? .applicationDefined : .transient }
+    }
 
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
@@ -30,16 +41,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 400, height: 380)
         popover.contentViewController = NSHostingController(rootView: SearchPanelView(
+            controller: self,
             onSelect: { [weak self] record in
-                self?.closeSearchDropdown()
                 LinkService.shared.open(id: record.id)
+                if self?.isPinned != true { self?.closeSearchDropdown() }
             },
             onCopy: { record in
                 LinkService.shared.copyLinkToClipboard(record)
             },
             onReveal: { [weak self] record in
-                self?.closeSearchDropdown()
                 LinkService.shared.open(id: record.id, reveal: true)
+                if self?.isPinned != true { self?.closeSearchDropdown() }
             }
         ))
         self.popover = popover
@@ -105,6 +117,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         popover?.performClose(nil)
     }
 
+    /// Always closes, regardless of pin state. Used by the dropdown's own
+    /// Esc handler, since `.applicationDefined` popovers (pinned) don't
+    /// close on their own for anything.
+    func forceCloseSearchDropdown() {
+        popover?.performClose(nil)
+    }
+
     // MARK: - NSMenuDelegate
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -112,6 +131,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(Self.item("Capture Link", key: "l", target: self, action: #selector(captureTapped)))
         menu.addItem(Self.item("Search Links…", key: "k", target: self, action: #selector(searchTapped)))
+
+        let pinItem = NSMenuItem(title: "Pin Search Window", action: #selector(togglePinTapped), keyEquivalent: "")
+        pinItem.target = self
+        pinItem.state = isPinned ? .on : .off
+        menu.addItem(pinItem)
+
         menu.addItem(.separator())
 
         let recent = LinkService.shared.recent(limit: 10)
@@ -151,6 +176,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func searchTapped() {
         showSearchDropdown()
+    }
+
+    @objc private func togglePinTapped() {
+        isPinned.toggle()
     }
 
     @objc private func recentItemTapped(_ sender: NSMenuItem) {

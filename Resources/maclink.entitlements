@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for a hardened-runtime app to send Apple Events at all
+         (spec section 3.4). Without it, Finder/Mail/Safari automation
+         fails even though the app is not sandboxed. Only takes effect
+         when signing with the runtime option enabled; see the "hardened"
+         mode in Scripts/build-app.sh. -->
+    <key>com.apple.security.automation.apple-events</key>
+    <true/>
+</dict>
+</plist>

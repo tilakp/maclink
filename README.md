@@ -10,14 +10,14 @@ See [`SPEC.md`](./SPEC.md) for the full product and technical spec this was buil
 
 ## Status
 
-The MVP capture/resolve pipeline is complete and verified live against real Finder, Mail, Safari, and arbitrary other apps. Still to come: a signed and notarized release build. See the build-order checklist in `SPEC.md` §12-13 for exact scope.
+The MVP capture/resolve pipeline is complete and verified live against real Finder, Mail, Safari, and arbitrary other apps. The signing/notarization infrastructure is in place (see Distribution note below) but only the ad-hoc path has been run live; the hardened-runtime path and the search dropdown's pin feature were built and structurally checked but not yet exercised live. See the build-order checklist in `SPEC.md` §12-13 for exact scope.
 
 ## What works today
 
 - **Global hotkeys**, fully configurable in Settings (default `⌃⌥⌘L` to capture, `⌃⌥⌘K` to search)
 - **Capture**: Finder (selection or front window), Mail.app (selected message), Safari (current tab), and a generic Accessibility-based fallback for everything else. Bonus: any document-based app (TextEdit, Preview, Pages, Xcode, and more) gets a full file link for free via `kAXDocumentAttribute`.
 - **Resolve**: opening a `maclink://open/<uuid>` URL brings you back to the exact file (bookmark-based, survives renames and moves), email (via the `message:` URL scheme), web page, or reactivates the source app
-- **Search dropdown**: the search hotkey opens a menu-bar-anchored search box over everything you've captured
+- **Search dropdown**: the search hotkey opens a menu-bar-anchored search box over everything you've captured, with per-row copy buttons plus a pin toggle (also in the menu bar's own menu) so you can open or copy several links in one sitting instead of the window closing after each one
 - **Capture toast**: a quick confirmation with inline tagging and an undo action
 - **Settings window**: clipboard format, launch at login, hotkey rebinding (including turning a hotkey off entirely), a permissions health check, and database tools (reveal in Finder, export as JSON)
 - **Local SQLite database**: plain, queryable `~/Library/Application Support/com.tilak.maclink/maclink.sqlite`. No cloud, no account.
@@ -40,7 +40,18 @@ Run the test suite with `swift test`.
 
 ### Distribution note
 
-This is built as an ad-hoc-signed, non-sandboxed app for personal use. App Sandbox would break Apple Events and Accessibility access, which the whole app depends on. See `SPEC.md` §3.4. There's no App Store build and none is planned.
+This is built as a non-sandboxed app for personal use. App Sandbox would break Apple Events and Accessibility access, which the whole app depends on. See `SPEC.md` §3.4. There's no App Store build and none is planned.
+
+`Scripts/build-app.sh` takes a second argument for signing mode:
+
+```sh
+Scripts/build-app.sh debug adhoc      # default: what every dev session actually runs
+Scripts/build-app.sh release hardened # hardened runtime + the Apple Events entitlement
+```
+
+The `hardened` mode matches what a real Developer ID release build needs, using `Resources/maclink.entitlements`. It's structurally verified (correct codesign flags and entitlements) but not yet exercised live, since hardened runtime changes how Apple Events get authorized. Re-test Finder/Mail/Safari capture after building this way before relying on it.
+
+Actual notarization needs a paid Apple Developer account, which this project doesn't have credentials for. `Scripts/notarize.sh` documents (does not automate) the full sign-zip-submit-staple sequence for whenever that's available.
 
 ## Using it from Emacs
 

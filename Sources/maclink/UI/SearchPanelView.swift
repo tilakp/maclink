@@ -4,7 +4,14 @@ import SwiftUI
 /// OQ-3). Plain substring search over title/subtitle/notes/tags/payload via
 /// `LinkStore`. The `type:`/`#tag`/`app:`/`since:` query mini-language is a
 /// later enhancement, not required for the dropdown to be useful.
+///
+/// Pinning (via the pin button here or the "Pin Search Window" menu item)
+/// keeps the window open after opening or copying a link, so multiple links
+/// can be acted on in one sitting instead of reopening the dropdown each
+/// time. `StatusItemController` owns `isPinned` since it also has to flip
+/// the popover's dismiss-on-outside-click behavior, not just this view.
 struct SearchPanelView: View {
+    @ObservedObject var controller: StatusItemController
     var onSelect: (LinkRecord) -> Void
     var onCopy: (LinkRecord) -> Void
     var onReveal: (LinkRecord) -> Void
@@ -16,14 +23,50 @@ struct SearchPanelView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            TextField("Search links…", text: $query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 14))
-                .padding(10)
-                .focused($searchFieldFocused)
-                .onKeyPress(.downArrow) { move(1); return .handled }
-                .onKeyPress(.upArrow) { move(-1); return .handled }
-                .onKeyPress(.return) { openSelected(); return .handled }
+            HStack(spacing: 6) {
+                TextField("Search links…", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14))
+                    .focused($searchFieldFocused)
+                    .onKeyPress { press in
+                        switch press.key {
+                        case .downArrow: move(1); return .handled
+                        case .upArrow: move(-1); return .handled
+                        case .return:
+                            if press.modifiers.contains(.command) {
+                                copySelected()
+                            } else {
+                                openSelected()
+                            }
+                            return .handled
+                        case .escape:
+                            controller.forceCloseSearchDropdown()
+                            return .handled
+                        default:
+                            return .ignored
+                        }
+                    }
+
+                Button {
+                    controller.isPinned.toggle()
+                } label: {
+                    Image(systemName: controller.isPinned ? "pin.fill" : "pin")
+                        .foregroundStyle(controller.isPinned ? Color.accentColor : Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(controller.isPinned
+                      ? "Pinned: opening or copying a link won't close this window"
+                      : "Pin so opening or copying a link doesn't close this window")
+            }
+            .padding(10)
+
+            if controller.isPinned {
+                Text("Pinned. Pick multiple links, then unpin or press Esc to close.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 6)
+            }
 
             Divider()
 
@@ -38,7 +81,7 @@ struct SearchPanelView: View {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(Array(results.enumerated()), id: \.element.id) { index, record in
-                                SearchResultRow(record: record, isSelected: index == selectedIndex)
+                                SearchResultRow(record: record, isSelected: index == selectedIndex, onCopy: onCopy)
                                     .id(index)
                                     .contentShape(Rectangle())
                                     .onTapGesture { onSelect(record) }
@@ -83,11 +126,17 @@ struct SearchPanelView: View {
         guard results.indices.contains(selectedIndex) else { return }
         onSelect(results[selectedIndex])
     }
+
+    private func copySelected() {
+        guard results.indices.contains(selectedIndex) else { return }
+        onCopy(results[selectedIndex])
+    }
 }
 
 private struct SearchResultRow: View {
     let record: LinkRecord
     let isSelected: Bool
+    let onCopy: (LinkRecord) -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -112,6 +161,15 @@ private struct SearchResultRow: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
+            Button {
+                onCopy(record)
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Copy maclink:// URL")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
