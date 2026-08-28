@@ -11,7 +11,7 @@ enum AutomationPermissionStatus: String {
 /// Read-only permission checks for the Settings health check (spec §5):
 /// these never trigger a system prompt themselves, so they're safe to call
 /// just to render UI. `automationStatus` is *not* safe to call on the main
-/// thread, though — see its note.
+/// thread, though. See its note.
 enum PermissionsService {
     /// Callers must keep this off the main thread. `AE.framework` documents
     /// that this call "may take arbitrarily long to return", and it talks to
