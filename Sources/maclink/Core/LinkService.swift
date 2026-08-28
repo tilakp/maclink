@@ -31,6 +31,10 @@ final class LinkService {
     private func openLink(id: UUID, reveal: Bool) {
         guard let record = try? store.fetch(id: id) else {
             recordDiagnostic("open: no such link \(id.uuidString)")
+            NotificationService.notifyFailure(
+                title: "Link not found",
+                body: "This maclink doesn't exist — the database may have been reset or the link deleted."
+            )
             return
         }
         Task {
@@ -47,7 +51,29 @@ final class LinkService {
                 recordDiagnostic("open: resolved \(record.resourceType.rawValue) \"\(record.title)\"")
             } catch {
                 recordDiagnostic("open: failed to resolve \"\(record.title)\": \(error)")
+                NotificationService.notifyFailure(
+                    title: "Couldn't open \"\(record.title)\"",
+                    body: Self.friendlyMessage(for: error, sourceAppName: record.sourceAppName)
+                )
             }
+        }
+    }
+
+    private static func friendlyMessage(for error: Error, sourceAppName: String?) -> String {
+        let app = sourceAppName ?? "the source app"
+        switch error {
+        case AutomationError.permissionDenied:
+            return "maclink needs permission to control \(app). Check System Settings > Privacy & Security > Automation."
+        case AutomationError.appNotRunning:
+            return "\(app) isn't running."
+        case AutomationError.timeout:
+            return "\(app) didn't respond in time."
+        case ResolveError.fileNotFound:
+            return "The file couldn't be found at its last known location."
+        case ResolveError.noStableIdentifier:
+            return "This item has no reliable identifier and can't be reopened."
+        default:
+            return "Something went wrong: \(String(describing: error))"
         }
     }
 
@@ -76,10 +102,22 @@ final class LinkService {
                 recordDiagnostic("capture: \(resources.count) link(s) from \(frontApp.bundleIdentifier ?? "?")")
             } catch CaptureError.unsupportedApp(let bundleID) {
                 recordDiagnostic("capture: no capturer for \(bundleID) yet")
+                NotificationService.notifyFailure(
+                    title: "Can't capture from \(frontApp.localizedName ?? bundleID)",
+                    body: "maclink doesn't support this app yet."
+                )
             } catch CaptureError.noSelection {
                 recordDiagnostic("capture: nothing selected in \(frontApp.bundleIdentifier ?? "?")")
+                NotificationService.notifyFailure(
+                    title: "Nothing to capture",
+                    body: "Select something in \(frontApp.localizedName ?? "the frontmost app") first."
+                )
             } catch {
                 recordDiagnostic("capture failed: \(error)")
+                NotificationService.notifyFailure(
+                    title: "Capture failed",
+                    body: Self.friendlyMessage(for: error, sourceAppName: frontApp.localizedName)
+                )
             }
         }
     }
