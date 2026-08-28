@@ -76,6 +76,10 @@ If your Emacs config overrides `browse-url-browser-function` to something that d
 
 See `SPEC.md` §10 for the full design.
 
+## Searching from Raycast
+
+`raycast-extension/` is a local Raycast extension with a "Search Links" command: search, then open, copy the link, or reveal a file in Finder, all without going through maclink's own search dropdown. Like the Emacs integration, it reads maclink's SQLite database directly rather than talking to the app. See `raycast-extension/README.md` for setup.
+
 ## Architecture, briefly
 
 A global hotkey (Carbon `RegisterEventHotKey`, no Accessibility permission needed) triggers `CaptureEngine`, which picks a per-app `Capturer` (Finder, Mail, Safari, or the generic AX fallback). Each capturer runs an `NSAppleScript` through `AutomationService`, a single serial queue that keeps every script call off the main thread and bounded by a timeout, since `NSAppleScript` isn't thread-safe and a hung target app shouldn't hang maclink.

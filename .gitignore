@@ -3,3 +3,6 @@ build/
 *.xcodeproj
 .swiftpm/
 .DS_Store
+raycast-extension/node_modules/
+raycast-extension/.ray/
+raycast-extension/raycast-env.d.ts
