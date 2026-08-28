@@ -1,8 +1,7 @@
+import AppKit
 import Foundation
 
 /// Facade over capture / resolve / search, per the architecture in spec §4.2.
-/// Wired up incrementally: this milestone only proves the `maclink://` URL
-/// round trip end to end. Capture/search/DB land in later build-order steps.
 final class LinkService {
     static let shared = LinkService()
 
@@ -16,46 +15,94 @@ final class LinkService {
 
         switch route {
         case .open(let id, let reveal):
-            recordDiagnostic("open id=\(id.uuidString) reveal=\(reveal)")
-            guard let record = try? store.fetch(id: id) else {
-                recordDiagnostic("open: no such link \(id.uuidString)")
-                return
-            }
-            try? store.recordOpened(id: id)
-            // TODO(build-order step 5+): ResolveEngine.shared.resolve(record, reveal: reveal)
-            recordDiagnostic("open: found \(record.resourceType.rawValue) \"\(record.title)\"")
+            openLink(id: id, reveal: reveal)
         case .show(let id):
             recordDiagnostic("show id=\(id.uuidString)")
         case .search(let query):
             let results = (try? store.search(query)) ?? []
             recordDiagnostic("search q=\(query) -> \(results.count) result(s)")
         case .capture:
-            recordDiagnostic("capture (external trigger)")
             captureFromHotkey()
         case .unrecognized(let raw):
             recordDiagnostic("unrecognized: \(raw)")
         }
     }
 
-    func captureFromHotkey() {
-        Log.capture.info("capture requested (not yet implemented)")
-        recordDiagnostic("capture requested (stub)")
-
-        // TODO(build-order step 5+): remove once CaptureEngine exists.
-        // Temporary smoke test for AutomationService / the Automation TCC
-        // permission flow (spec §3.3, §5) — proves the AppleScript path
-        // works (or reports exactly why not) before Finder/Mail capturers
-        // are built on top of it.
+    private func openLink(id: UUID, reveal: Bool) {
+        guard let record = try? store.fetch(id: id) else {
+            recordDiagnostic("open: no such link \(id.uuidString)")
+            return
+        }
         Task {
             do {
-                let result = try await AutomationService.shared.run(
-                    #"tell application "Finder" to return name of front window"#
-                )
-                recordDiagnostic("automation smoke test ok: \(result.stringValue ?? "<no window>")")
+                let repaired = try await ResolveEngine.shared.resolve(record, reveal: reveal)
+                // Order matters: `update` overwrites the whole row from a
+                // Swift value fetched before this resolve ran, so it must
+                // land before the narrow open_count/last_opened_at bump
+                // below — otherwise it clobbers that bump back to 0.
+                if let repaired {
+                    try? store.update(repaired)
+                }
+                try? store.recordOpened(id: id)
+                recordDiagnostic("open: resolved \(record.resourceType.rawValue) \"\(record.title)\"")
             } catch {
-                recordDiagnostic("automation smoke test failed: \(error)")
+                recordDiagnostic("open: failed to resolve \"\(record.title)\": \(error)")
             }
         }
+    }
+
+    func captureFromHotkey() {
+        // Captured immediately, synchronously — the last moment it's
+        // guaranteed to still be the app the user was actually looking at
+        // (spec §4.4 step 1). maclink is LSUIElement and never activates
+        // itself, so this stays correct even when triggered via the
+        // maclink://capture URL route rather than a real hotkey yet.
+        guard let frontApp = NSWorkspace.shared.frontmostApplication else {
+            recordDiagnostic("capture: no frontmost app")
+            return
+        }
+
+        Task {
+            do {
+                let resources = try await CaptureEngine.shared.capture(frontApp: frontApp)
+                var copiedURLs: [String] = []
+                for resource in resources {
+                    let maclinkURL = try storeAndDedupe(resource)
+                    copiedURLs.append(maclinkURL)
+                }
+                if !copiedURLs.isEmpty {
+                    writeToClipboard(copiedURLs.joined(separator: "\n"))
+                }
+                recordDiagnostic("capture: \(resources.count) link(s) from \(frontApp.bundleIdentifier ?? "?")")
+            } catch CaptureError.unsupportedApp(let bundleID) {
+                recordDiagnostic("capture: no capturer for \(bundleID) yet")
+            } catch CaptureError.noSelection {
+                recordDiagnostic("capture: nothing selected in \(frontApp.bundleIdentifier ?? "?")")
+            } catch {
+                recordDiagnostic("capture failed: \(error)")
+            }
+        }
+    }
+
+    /// Inserts a captured resource, or bumps the existing record if one
+    /// already represents the same underlying resource (spec §8.5).
+    private func storeAndDedupe(_ resource: CapturedResource) throws -> String {
+        if let existing = try store.findExisting(for: resource.payload) {
+            try store.update(existing) // bumps updated_at
+            recordDiagnostic("capture: existing link reused (\(existing.tags.count) tags)")
+            return "maclink://open/\(existing.id.uuidString)"
+        }
+        let record = LinkRecord(
+            title: resource.title,
+            subtitle: resource.subtitle,
+            payload: resource.payload,
+            bookmarkData: resource.bookmarkData,
+            sourceBundleID: resource.sourceBundleID,
+            sourceAppName: resource.sourceAppName,
+            captureMethod: resource.captureMethod
+        )
+        let inserted = try store.insert(record)
+        return "maclink://open/\(inserted.id.uuidString)"
     }
 
     func showSearchPanel() {
@@ -63,9 +110,15 @@ final class LinkService {
         recordDiagnostic("search panel requested (stub)")
     }
 
-    /// Temporary: appends a line to a plain-text log so URL-scheme handling
-    /// can be verified from the terminal before there's any UI to look at.
-    /// Remove once the real resolve/capture paths exist.
+    private func writeToClipboard(_ string: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(string, forType: .string)
+    }
+
+    /// Temporary: appends a line to a plain-text log so behavior can be
+    /// verified from the terminal before there's a UI to look at. Remove
+    /// once the capture toast (build order step 11) exists.
     private func recordDiagnostic(_ message: String) {
         let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
         let url = Paths.appSupportDirectory.appendingPathComponent("diagnostic.log")

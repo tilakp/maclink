@@ -1,0 +1,28 @@
+import AppKit
+
+enum CaptureError: Error {
+    case unsupportedApp(String)
+    case noSelection
+    case malformedCapture(String)
+}
+
+/// One resource pulled out of a `Capturer`, before it becomes a `LinkRecord`
+/// (spec §4.2). `CaptureEngine` turns these into records; a capturer never
+/// touches the database itself.
+struct CapturedResource {
+    var payload: Payload
+    var title: String
+    var subtitle: String? = nil
+    var bookmarkData: Data? = nil
+    var sourceBundleID: String
+    var sourceAppName: String
+    var captureMethod: CaptureMethod
+}
+
+/// A per-app capture strategy (spec §7). `supportedBundleIDs` is how
+/// `CaptureEngine` routes the frontmost app to the right capturer; an empty
+/// set marks the generic fallback.
+protocol Capturer {
+    var supportedBundleIDs: Set<String> { get }
+    func capture(frontApp: NSRunningApplication) async throws -> [CapturedResource]
+}
