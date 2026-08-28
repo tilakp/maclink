@@ -146,11 +146,6 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
         menu.addItem(Self.item("Capture Link", binding: HotkeySettings.capture, target: self, action: #selector(captureTapped)))
         menu.addItem(Self.item("Search Links…", binding: HotkeySettings.search, target: self, action: #selector(searchTapped)))
 
-        let pinItem = NSMenuItem(title: "Pin Search Window", action: #selector(togglePinTapped), keyEquivalent: "")
-        pinItem.target = self
-        pinItem.state = isPinned ? .on : .off
-        menu.addItem(pinItem)
-
         menu.addItem(.separator())
 
         let recent = LinkService.shared.recent(limit: 10)
@@ -208,10 +203,6 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
 
     @objc private func searchTapped() {
         showSearchDropdown()
-    }
-
-    @objc private func togglePinTapped() {
-        isPinned.toggle()
     }
 
     @objc private func recentItemTapped(_ sender: NSMenuItem) {
