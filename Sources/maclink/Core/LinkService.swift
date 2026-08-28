@@ -40,6 +40,22 @@ final class LinkService {
     func captureFromHotkey() {
         Log.capture.info("capture requested (not yet implemented)")
         recordDiagnostic("capture requested (stub)")
+
+        // TODO(build-order step 5+): remove once CaptureEngine exists.
+        // Temporary smoke test for AutomationService / the Automation TCC
+        // permission flow (spec §3.3, §5) — proves the AppleScript path
+        // works (or reports exactly why not) before Finder/Mail capturers
+        // are built on top of it.
+        Task {
+            do {
+                let result = try await AutomationService.shared.run(
+                    #"tell application "Finder" to return name of front window"#
+                )
+                recordDiagnostic("automation smoke test ok: \(result.stringValue ?? "<no window>")")
+            } catch {
+                recordDiagnostic("automation smoke test failed: \(error)")
+            }
+        }
     }
 
     func showSearchPanel() {
