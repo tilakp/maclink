@@ -6,6 +6,8 @@ import Foundation
 final class LinkService {
     static let shared = LinkService()
 
+    private let store = LinkStore.shared
+
     private init() {}
 
     func handle(_ url: URL) {
@@ -15,11 +17,18 @@ final class LinkService {
         switch route {
         case .open(let id, let reveal):
             recordDiagnostic("open id=\(id.uuidString) reveal=\(reveal)")
-            // TODO(build-order step 5+): ResolveEngine.shared.resolve(id, reveal: reveal)
+            guard let record = try? store.fetch(id: id) else {
+                recordDiagnostic("open: no such link \(id.uuidString)")
+                return
+            }
+            try? store.recordOpened(id: id)
+            // TODO(build-order step 5+): ResolveEngine.shared.resolve(record, reveal: reveal)
+            recordDiagnostic("open: found \(record.resourceType.rawValue) \"\(record.title)\"")
         case .show(let id):
             recordDiagnostic("show id=\(id.uuidString)")
         case .search(let query):
-            recordDiagnostic("search q=\(query)")
+            let results = (try? store.search(query)) ?? []
+            recordDiagnostic("search q=\(query) -> \(results.count) result(s)")
         case .capture:
             recordDiagnostic("capture (external trigger)")
             captureFromHotkey()
