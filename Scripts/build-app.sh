@@ -43,14 +43,36 @@ cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
 cp "$ROOT/Resources/AppIcon.icns" "$CONTENTS/Resources/AppIcon.icns"
 printf 'APPL????' > "$CONTENTS/PkgInfo"
 
+# An ad-hoc signature has no certificate to anchor to, so the app's
+# designated requirement degrades to a bare cdhash of the binary. macOS
+# TCC keys the Accessibility grant on that requirement, so every rebuild
+# voids the permission while still showing its checkbox as enabled. A
+# stable signing identity anchors the requirement to the certificate
+# instead, and the grant then survives rebuilds. See Scripts/README-signing.md.
+#
+# Deliberately not `find-identity -v`: a self-signed root is reported
+# untrusted (CSSMERR_TP_NOT_TRUSTED) and so is filtered out of the "valid"
+# list, yet it signs fine and produces exactly the stable requirement we
+# want. Trusting the certificate is not needed for TCC.
+IDENTITY="${MACLINK_SIGN_IDENTITY:-maclink-dev}"
+if security find-identity -p codesigning 2>/dev/null | grep -qF "$IDENTITY"; then
+    SIGN_WITH="$IDENTITY"
+    echo "==> signing identity: $IDENTITY (Accessibility permission will persist)"
+else
+    SIGN_WITH="-"
+    echo "==> no '$IDENTITY' identity found, falling back to ad-hoc"
+    echo "    Accessibility permission will need re-adding after this build."
+    echo "    See Scripts/README-signing.md to fix this once and for all."
+fi
+
 case "$SIGN_MODE" in
     adhoc)
-        echo "==> ad-hoc codesigning"
-        codesign --force --sign - --identifier com.tilak.maclink "$APP_DIR"
+        echo "==> codesigning"
+        codesign --force --sign "$SIGN_WITH" --identifier com.tilak.maclink "$APP_DIR"
         ;;
     hardened)
-        echo "==> ad-hoc codesigning with hardened runtime + entitlements"
-        codesign --force --sign - --options runtime \
+        echo "==> codesigning with hardened runtime + entitlements"
+        codesign --force --sign "$SIGN_WITH" --options runtime \
             --entitlements "$ROOT/Resources/maclink.entitlements" \
             --identifier com.tilak.maclink "$APP_DIR"
         ;;
