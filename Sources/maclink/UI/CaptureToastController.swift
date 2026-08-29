@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// Owns the capture confirmation toast lifecycle (spec §9.2): a
-/// non-activating floating panel, top-center of the screen under the
+/// non-activating floating panel, centered on the screen under the
 /// mouse, auto-dismissing after 4s unless the tag field has focus.
 final class CaptureToastController {
     static let shared = CaptureToastController()
@@ -12,6 +12,8 @@ final class CaptureToastController {
     private var trackedRecordIDs: [UUID] = []
     private var newRecordIDs: Set<UUID> = []
     private var previousClipboard: String?
+    private var localEscMonitor: Any?
+    private var globalEscMonitor: Any?
 
     private init() {}
 
@@ -56,19 +58,42 @@ final class CaptureToastController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isReleasedWhenClosed = false
 
-        positionTopCenter(panel)
+        positionCenter(panel)
         panel.orderFrontRegardless()
         self.panel = panel
         scheduleAutoDismiss()
+        installEscMonitors()
     }
 
-    private func positionTopCenter(_ panel: NSPanel) {
+    private func positionCenter(_ panel: NSPanel) {
         let mouseLocation = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouseLocation) } ?? NSScreen.main
         guard let screen else { return }
         let size = panel.frame.size
-        let origin = NSPoint(x: screen.frame.midX - size.width / 2, y: screen.frame.maxY - size.height - 40)
+        let origin = NSPoint(x: screen.frame.midX - size.width / 2, y: screen.frame.midY - size.height / 2)
         panel.setFrameOrigin(origin)
+    }
+
+    /// The panel is non-activating and usually isn't the key window, so a
+    /// plain SwiftUI `.onKeyPress(.escape)` only fires once the tag field
+    /// has been clicked into. These monitors catch Esc regardless of focus.
+    private func installEscMonitors() {
+        localEscMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return event }
+            self?.dismiss()
+            return nil
+        }
+        globalEscMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return }
+            self?.dismiss()
+        }
+    }
+
+    private func removeEscMonitors() {
+        if let localEscMonitor { NSEvent.removeMonitor(localEscMonitor) }
+        if let globalEscMonitor { NSEvent.removeMonitor(globalEscMonitor) }
+        localEscMonitor = nil
+        globalEscMonitor = nil
     }
 
     private func scheduleAutoDismiss() {
@@ -126,6 +151,7 @@ final class CaptureToastController {
 
     private func dismiss() {
         cancelAutoDismiss()
+        removeEscMonitors()
         panel?.close()
         panel = nil
     }
