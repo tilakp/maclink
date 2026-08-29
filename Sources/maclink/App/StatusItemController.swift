@@ -19,6 +19,12 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
         didSet { popover?.behavior = isPinned ? .applicationDefined : .transient }
     }
 
+    /// Bumped each time the dropdown is shown. The popover keeps one
+    /// hosting controller alive for the app's lifetime, so `onAppear` in
+    /// `SearchPanelView` fires only once; without this the panel would
+    /// still be showing whatever it queried the first time it opened.
+    @Published private(set) var showToken = 0
+
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
     /// Invisible 1x1 anchor window used only when the real status item frame
@@ -62,6 +68,22 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
             }
         ))
         self.popover = popover
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidResignActive),
+            name: NSApplication.didResignActiveNotification,
+            object: nil
+        )
+    }
+
+    /// A `.transient` popover only closes on a click *inside* the app, so
+    /// clicking straight into another app left the dropdown floating over
+    /// it. Pinned dropdowns stay: surviving another app taking over is
+    /// exactly what pinning is for.
+    @objc private func appDidResignActive() {
+        guard !isPinned else { return }
+        popover?.performClose(nil)
     }
 
     func showSearchDropdown() {
@@ -96,6 +118,9 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
                 popover.show(relativeTo: .zero, of: self.fallbackAnchorView(), preferredEdge: .minY)
             }
             popover.contentViewController?.view.window?.makeKey()
+            // After `makeKey`, so the panel's request for keyboard focus
+            // lands on a window that can actually take it.
+            self.showToken += 1
         }
     }
 

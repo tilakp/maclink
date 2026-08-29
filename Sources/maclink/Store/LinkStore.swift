@@ -1,6 +1,12 @@
 import Foundation
 import GRDB
 
+extension Notification.Name {
+    /// Posted after any write that changes what search or the Recent menu
+    /// shows. Views observe it so an open list doesn't go stale.
+    static let linkStoreDidChange = Notification.Name("maclink.linkStoreDidChange")
+}
+
 /// All persistence (spec §4.2 "LinkStore"). Owns migrations and tag
 /// management. `links_fts`/`links_fts_map` exist per the §8.2 schema so the
 /// database is ready for the FTS5-backed search described in §9.3, but this
@@ -30,6 +36,15 @@ final class LinkStore {
         Log.db.info("database ready at \(url.path, privacy: .public)")
     }
 
+    /// Always called *after* the enclosing `dbQueue.write` returns, never
+    /// inside it: a `DatabaseQueue` serializes every access, so an observer
+    /// reading back while the write block still holds the queue deadlocks.
+    private func notifyChanged() {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: .linkStoreDidChange, object: nil)
+        }
+    }
+
     // MARK: - CRUD
 
     @discardableResult
@@ -40,6 +55,7 @@ final class LinkStore {
             try self.setTags(record.tags, for: record.id, db: db)
         }
         Log.db.info("inserted link \(record.id.uuidString, privacy: .public) (\(record.resourceType.rawValue, privacy: .public))")
+        notifyChanged()
         return record
     }
 
@@ -50,6 +66,7 @@ final class LinkStore {
             try record.update(db)
             try self.setTags(record.tags, for: record.id, db: db)
         }
+        notifyChanged()
     }
 
     func fetch(id: UUID) throws -> LinkRecord? {
@@ -89,6 +106,7 @@ final class LinkStore {
         _ = try dbQueue.write { db in
             try LinkRecord.deleteOne(db, key: id.uuidString.uppercased())
         }
+        notifyChanged()
     }
 
     /// Soft delete: hides the link from `fetchAll`/`search` without losing
@@ -100,6 +118,7 @@ final class LinkStore {
                 arguments: [archived, Date().timeIntervalSince1970, id.uuidString.uppercased()]
             )
         }
+        notifyChanged()
     }
 
     func recordOpened(id: UUID) throws {
@@ -183,6 +202,7 @@ final class LinkStore {
         try dbQueue.write { db in
             try self.setTags(names, for: linkID, db: db)
         }
+        notifyChanged()
     }
 
     // MARK: - Search

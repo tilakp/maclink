@@ -130,6 +130,19 @@ struct SearchPanelView: View {
             selectedIndex = 0
             refresh()
         }
+        // Each opening starts clean: an empty query listing the newest
+        // links, selection at the top, and the field ready to type into.
+        .onChange(of: controller.showToken) { _, _ in
+            query = ""
+            selectedIndex = 0
+            searchFieldFocused = true
+            refresh()
+        }
+        // Keeps an already-open dropdown current when a capture, archive,
+        // or delete lands while it's on screen.
+        .onReceive(NotificationCenter.default.publisher(for: .linkStoreDidChange)) { _ in
+            refresh()
+        }
         .alert(
             "Delete this link?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
