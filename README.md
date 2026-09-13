@@ -12,11 +12,13 @@ See [`SPEC.md`](./SPEC.md) for the full product and technical spec this was buil
 
 The MVP capture/resolve pipeline is complete and verified live against real Finder, Mail, Safari, and arbitrary other apps. The signing/notarization infrastructure is in place (see Distribution note below) but only the ad-hoc path has been run live; the hardened-runtime path and the search dropdown's pin feature were built and structurally checked but not yet exercised live. See the build-order checklist in `SPEC.md` §12-13 for exact scope.
 
+Two Phase 2 pieces have since been added: the read-only `maclink` CLI (verified live), and the file-link repair ladder's Spotlight relink and manual-picker steps (§7.6 steps 3-5). The manual picker and delete-link steps are verified live end-to-end; the Spotlight-relink steps haven't yet shown a confirmed live match, most likely because maclink has never needed (and so never prompted for) Documents-folder access before — see `SPEC.md` §12.2 item 3.
+
 ## What works today
 
 - **Global hotkeys**, fully configurable in Settings (default `⌃⌥⌘L` to capture, `⌃⌥⌘K` to search)
 - **Capture**: Finder (selection or front window), Mail.app (selected message), Safari (current tab), and a generic Accessibility-based fallback for everything else. Bonus: any document-based app (TextEdit, Preview, Pages, Xcode, and more) gets a full file link for free via `kAXDocumentAttribute`.
-- **Resolve**: opening a `maclink://open/<uuid>` URL brings you back to the exact file (bookmark-based, survives renames and moves), email (via the `message:` URL scheme), web page, or reactivates the source app
+- **Resolve**: opening a `maclink://open/<uuid>` URL brings you back to the exact file (bookmark-based, survives renames and moves), email (via the `message:` URL scheme), web page, or reactivates the source app. If a file's moved somewhere bookmark resolution can't follow, it falls back to a Spotlight name/size search, then a manual file picker or link deletion (spec §7.6).
 - **Search dropdown**: the search hotkey opens a menu-bar-anchored search box over everything you've captured, with per-row copy buttons plus a pin toggle in the dropdown itself so you can open or copy several links in one sitting instead of the window closing after each one. Archive a link (Command-Delete, reversible) or delete it permanently (Shift-Command-Delete, with a confirmation) right from the same list.
 - **Capture toast**: a quick confirmation with inline tagging and an undo action
 - **Settings window**: clipboard format, launch at login, hotkey rebinding (including turning a hotkey off entirely), a permissions health check, and database tools (reveal in Finder, export as JSON)
@@ -75,6 +77,19 @@ If your Emacs config overrides `browse-url-browser-function` to something that d
 - A real `maclink` org link type for nicer display, completion, and export, with completion querying the database directly through the `sqlite3` CLI
 
 See `SPEC.md` §10 for the full design.
+
+## The `maclink` CLI
+
+A tiny read-only CLI, in `Sources/maclink-cli`, that reads the same SQLite database directly, no running app required. Build and install it with `Scripts/install-cli.sh` (puts it at `~/.local/bin/maclink`):
+
+```sh
+maclink latest [--org|--json|--url]   # most recent link (default: bare URL)
+maclink get <uuid> [--json]
+maclink search <query> [--json] [--limit N]
+maclink capture                        # opens maclink://capture, triggers a capture in the running app
+```
+
+This is what `contrib/maclink.el`'s optional sugar (`maclink-insert-latest`, the `maclink` org link type's completion) shells out to.
 
 ## Searching from Raycast
 

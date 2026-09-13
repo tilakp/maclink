@@ -1,6 +1,6 @@
 ;;; maclink.el --- Optional Emacs sugar for maclink -*- lexical-binding: t; -*-
 
-;; This is entirely optional. `maclink://open/<uuid>` links already open
+;; This is entirely optional. `maclink://open/<uuid>' links already open
 ;; with zero configuration: org-mode falls through to `browse-url' for
 ;; unrecognized schemes, and `browse-url-default-macosx-browser' shells out
 ;; to `/usr/bin/open', which Launch Services routes straight to maclink.
@@ -8,21 +8,28 @@
 ;;
 ;; What this file adds on top of that baseline:
 ;;   - `maclink-insert-from-clipboard': paste the link just captured by the
-;;     hotkey as a proper org link, without needing a maclink CLI.
+;;     hotkey as a proper org link. Needs no CLI, just the clipboard.
+;;   - `maclink-insert-latest': same, but pulls the most recent capture from
+;;     the database instead of the clipboard (spec §10.3).
 ;;   - A real `maclink' org link type (spec §10.4), purely for nicer
 ;;     display/completion/export in org buffers. NOT required for opening.
-;;     Completion queries the database directly via the `sqlite3' CLI
-;;     (present on every Mac), since maclink deliberately keeps its
-;;     database plain and queryable rather than shipping a separate tool
-;;     just for this.
+;;
+;; `maclink-insert-latest' and the org link type's completion both shell out
+;; to the `maclink' CLI (Sources/maclink-cli), which reads the database
+;; read-only. Install it first with Scripts/install-cli.sh, which puts it at
+;; ~/.local/bin/maclink -- make sure that's on Emacs's `exec-path'/`PATH'.
 
 (require 'org)
 
-(defconst maclink-db-path
-  (expand-file-name "~/Library/Application Support/com.tilak.maclink/maclink.sqlite")
-  "Path to maclink's SQLite database. Read-only access only. Never write
-here from Emacs; the running app owns writes, and this file may be opened
-concurrently via WAL mode, which tolerates concurrent readers just fine.")
+(defun maclink--cli (&rest args)
+  "Run the maclink CLI with ARGS, returning trimmed stdout.
+Signals a `user-error' with the CLI's own message on failure, e.g. when it
+isn't installed or the database has no links yet."
+  (with-temp-buffer
+    (let ((status (apply #'call-process "maclink" nil t nil args)))
+      (unless (zerop status)
+        (user-error "%s" (string-trim (buffer-string)))))
+    (string-trim (buffer-string))))
 
 ;;;###autoload
 (defun maclink-insert-from-clipboard ()
@@ -37,15 +44,13 @@ pressing maclink's capture hotkey."
       (insert (format "[[%s][%s]]" s (read-string "Description: "))))
      (t (user-error "Clipboard does not contain a maclink URL")))))
 
-(defun maclink--sqlite (sql)
-  "Run SQL against maclink's database read-only, returning trimmed output."
-  (unless (file-exists-p maclink-db-path)
-    (user-error "maclink database not found at %s" maclink-db-path))
-  (string-trim
-   (shell-command-to-string
-    (format "sqlite3 -readonly -separator '\t' %s %s"
-            (shell-quote-argument maclink-db-path)
-            (shell-quote-argument sql)))))
+;;;###autoload
+(defun maclink-insert-latest ()
+  "Insert the most recently captured maclink as an org link at point.
+Bind this to something like \\[maclink-insert-latest], e.g. `C-c m' in
+`org-mode-map'."
+  (interactive)
+  (insert (maclink--cli "latest" "--org")))
 
 (defun maclink-org-follow (path _arg)
   "Open a `maclink:PATH' org link. PATH shows up two different ways
@@ -61,13 +66,10 @@ must resolve to the same well-formed `maclink://...' URL for `open'."
   (or desc (concat "maclink://" (string-remove-prefix "//" path))))
 
 (defun maclink-org-complete ()
-  "Completing-read over saved links, queried directly from the database."
-  (let* ((rows (split-string
-                (maclink--sqlite
-                 "SELECT id, title FROM links WHERE archived = 0 ORDER BY created_at DESC LIMIT 200;")
-                "\n" t))
+  "Completing-read over saved links via the maclink CLI."
+  (let* ((rows (split-string (maclink--cli "search" "" "--limit" "200") "\n" t))
          (choice (completing-read "maclink: " rows)))
-    (concat "maclink:open/" (downcase (car (split-string choice "\t"))))))
+    (concat "maclink:" (car (split-string choice "\t")))))
 
 (org-link-set-parameters "maclink"
   :follow   #'maclink-org-follow

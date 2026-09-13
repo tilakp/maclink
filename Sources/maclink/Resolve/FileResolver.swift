@@ -1,15 +1,15 @@
 import AppKit
 
-/// Resolves `.file` links via bookmark data, with repair ladder steps 1–2
-/// (spec §7.2, §7.6). Steps 3–5 (Spotlight relink, manual picker) are
-/// Phase 2.
+/// Resolves `.file` links via bookmark data, with the full repair ladder
+/// (spec §7.2, §7.6): bookmark resolution, the stored path, then Spotlight
+/// relink and a manual picker via `FileRelinker` (steps 3-5).
 struct FileResolver: Resolver {
     func resolve(_ record: LinkRecord, reveal: Bool) async throws -> LinkRecord? {
         guard case .file(let payload) = record.payload else {
             throw ResolveError.notImplemented(record.resourceType)
         }
 
-        var updatedRecord: LinkRecord? = nil
+        var updatedRecord: LinkRecord?
         var resolvedURL: URL?
 
         if let bookmarkData = record.bookmarkData {
@@ -30,19 +30,7 @@ struct FileResolver: Resolver {
                 let moved = url.path != payload.path
                 if stale || moved {
                     Log.resolve.info("repairing file link \(record.id.uuidString, privacy: .public) (stale=\(stale, privacy: .public) moved=\(moved, privacy: .public))")
-                    var repaired = record
-                    if stale, let freshData = try? url.bookmarkData(
-                        options: [], includingResourceValuesForKeys: [.nameKey, .contentTypeKey], relativeTo: nil
-                    ) {
-                        repaired.bookmarkData = freshData
-                    }
-                    var repairedPayload = payload
-                    repairedPayload.path = url.path
-                    repairedPayload.displayName = url.lastPathComponent
-                    repaired.payload = .file(repairedPayload)
-                    repaired.subtitle = url.deletingLastPathComponent().path
-                    repaired.repairedAt = Date()
-                    updatedRecord = repaired
+                    updatedRecord = Self.repairedRecord(from: record, payload: payload, newURL: url, regenerateBookmark: stale)
                 }
             }
         }
@@ -53,8 +41,22 @@ struct FileResolver: Resolver {
             resolvedURL = URL(fileURLWithPath: payload.path)
         }
 
+        // Steps 3-5: Spotlight relink, then a manual picker or deletion.
+        // Each requires the user's confirmation before anything is written.
+        if resolvedURL == nil {
+            switch await FileRelinker.repair(payload: payload, linkID: record.id) {
+            case .relinked(let url):
+                Log.resolve.info("relinked file \(record.id.uuidString, privacy: .public) to \(url.path, privacy: .public)")
+                resolvedURL = url
+                updatedRecord = Self.repairedRecord(from: record, payload: payload, newURL: url, regenerateBookmark: true)
+            case .deleted:
+                throw ResolveError.linkDeleted
+            case .cancelled:
+                throw ResolveError.fileNotFound
+            }
+        }
+
         guard let url = resolvedURL else {
-            // Steps 3–5 (Spotlight relink, manual picker) are Phase 2.
             throw ResolveError.fileNotFound
         }
 
@@ -67,5 +69,23 @@ struct FileResolver: Resolver {
         }
 
         return updatedRecord
+    }
+
+    private static func repairedRecord(
+        from record: LinkRecord, payload: FilePayload, newURL: URL, regenerateBookmark: Bool
+    ) -> LinkRecord {
+        var repaired = record
+        if regenerateBookmark, let freshData = try? newURL.bookmarkData(
+            options: [], includingResourceValuesForKeys: [.nameKey, .contentTypeKey], relativeTo: nil
+        ) {
+            repaired.bookmarkData = freshData
+        }
+        var repairedPayload = payload
+        repairedPayload.path = newURL.path
+        repairedPayload.displayName = newURL.lastPathComponent
+        repaired.payload = .file(repairedPayload)
+        repaired.subtitle = newURL.deletingLastPathComponent().path
+        repaired.repairedAt = Date()
+        return repaired
     }
 }

@@ -17,6 +17,13 @@ let package = Package(
             ],
             path: "Sources/maclink"
         ),
+        .executableTarget(
+            name: "maclink-cli",
+            dependencies: [
+                .product(name: "GRDB", package: "GRDB.swift")
+            ],
+            path: "Sources/maclink-cli"
+        ),
         .testTarget(
             name: "maclinkTests",
             dependencies: ["maclink"],

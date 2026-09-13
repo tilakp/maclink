@@ -7,6 +7,9 @@ enum ResolveError: Error {
     case noStableIdentifier
     case malformedURL
     case appNotInstalled
+    /// The user chose "Delete Link" from the file repair ladder (spec
+    /// §7.6 step 5) after the file couldn't be found or relinked.
+    case linkDeleted
 }
 
 /// A per-resource-type strategy that brings the user back to a captured

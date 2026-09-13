@@ -51,6 +51,12 @@ final class LinkService {
                 }
                 try? store.recordOpened(id: id)
                 recordDiagnostic("open: resolved \(record.resourceType.rawValue) \"\(record.title)\"")
+            } catch ResolveError.linkDeleted {
+                recordDiagnostic("open: link \"\(record.title)\" deleted after failed relink")
+                NotificationService.notifyFailure(
+                    title: "Link deleted",
+                    body: "\"\(record.title)\" couldn't be found and was removed."
+                )
             } catch {
                 recordDiagnostic("open: failed to resolve \"\(record.title)\": \(error)")
                 NotificationService.notifyFailure(

@@ -1056,9 +1056,9 @@ Capture *from* Emacs: an `emacsclient --eval` call that returns `(buffer-file-na
 
 Roughly in value order:
 
-1. **`maclink` CLI** (read-only DB access) — unlocks the nicer Emacs integration. *(Small, high value — could arguably be MVP.)*
+1. **`maclink` CLI** (read-only DB access) — unlocks the nicer Emacs integration. *(Small, high value — could arguably be MVP.)* **Built**: `Sources/maclink-cli`, installed via `Scripts/install-cli.sh`; `contrib/maclink.el` uses it.
 2. **Chrome + Chromium forks** (Arc, Brave, Edge). Near-zero marginal cost once Safari works.
-3. **Repair ladder steps 3–5** (Spotlight relink, manual relink UI) and the Mail tier-2 search fallback with a cancellable progress UI.
+3. **Repair ladder steps 3–5** (Spotlight relink, manual relink UI) — **built**, see `FileRelinker.swift`, but only partially verified live: testing surfaced an `NSMetadataQuery` predicate bug (the `[c]` case-insensitive modifier silently matches nothing against Spotlight; fixed by using plain `==`, as this section already specified) and then, even after that fix, `NSMetadataQuery` from inside the app kept returning zero hits for a file `mdfind` found instantly outside it — steps 3-4 (the actual relink offers) never surfaced a live match, though step 5's give-up prompt (manual picker / delete link) resolved correctly end-to-end including the DB write-back. Most likely cause: maclink has never needed Documents-folder access before, so it may need a one-time grant under System Settings > Privacy & Security > Files and Folders (check there, or watch for a prompt, before assuming it's a code bug). The Mail tier-2 search fallback with a cancellable progress UI is still unbuilt.
 4. **Emacs as a capture source** via `emacsclient` (§10.5).
 5. **PDF/Preview deep links** — page number via `#page=N`; text-selection anchors need PDFKit and a quoting scheme (store the selected text + page + a character range, re-find the text on open since ranges drift).
 6. **Browser text-selection capture** via `do JavaScript` (requires the user to enable Allow JavaScript from Apple Events) — store `window.getSelection()` text plus a scroll anchor; resolve by re-finding and highlighting.
