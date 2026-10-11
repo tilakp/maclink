@@ -26,6 +26,14 @@ Two Phase 2 pieces have since been added: the read-only `maclink` CLI (verified 
 - **Dedupe**: recapturing the same file, email, or URL reuses the existing link instead of creating a duplicate
 - **Emacs integration**: works with zero configuration, described below
 
+## Install
+
+1. Download the latest `.dmg` from [Releases](../../releases/latest). Open it and drag maclink into Applications.
+2. Open maclink once and close the warning. It is not notarized, so macOS blocks it the first time. Then open **System Settings › Privacy & Security** and click **Open Anyway**.
+3. maclink lives in the menu bar, not the Dock. Each integration (Finder, Mail, Safari, Accessibility) asks for its macOS permission the first time you use it.
+
+Universal binary (Apple Silicon and Intel). Requires macOS 14 or later.
+
 ## Building and running
 
 Requires Xcode (for the Swift toolchain) on macOS 14 or later.
@@ -105,4 +113,4 @@ Full detail in `SPEC.md`.
 
 ## License
 
-Personal project, no license file yet. Treat as all rights reserved until one is added.
+[MIT](LICENSE)
