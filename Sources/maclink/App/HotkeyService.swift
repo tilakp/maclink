@@ -20,13 +20,27 @@ final class HotkeyService {
 
     func start() {
         installEventHandlerIfNeeded()
-        _ = apply(name: "capture", binding: HotkeySettings.capture) {
+        let captureBinding = HotkeySettings.capture
+        let captureOK = apply(name: "capture", binding: captureBinding) {
             LinkService.shared.captureFromHotkey()
         }
-        _ = apply(name: "search", binding: HotkeySettings.search) {
+        if !captureOK, let binding = captureBinding {
+            NotificationService.notifyFailure(
+                title: "Capture hotkey \(binding.display) is not available",
+                body: "Another app may already use it. Choose a different shortcut in maclink Settings > Hotkeys."
+            )
+        }
+        let searchBinding = HotkeySettings.search
+        let searchOK = apply(name: "search", binding: searchBinding) {
             LinkService.shared.showSearchPanel()
         }
-        Log.app.info("global hotkeys registered")
+        if !searchOK, let binding = searchBinding {
+            NotificationService.notifyFailure(
+                title: "Search hotkey \(binding.display) is not available",
+                body: "Another app may already use it. Choose a different shortcut in maclink Settings > Hotkeys."
+            )
+        }
+        Log.app.info("global hotkeys: capture=\(captureOK) search=\(searchOK)")
     }
 
     /// Re-registers the capture hotkey to a new binding (or clears it, for
