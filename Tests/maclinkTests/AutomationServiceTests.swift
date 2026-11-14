@@ -8,6 +8,8 @@ final class AutomationServiceTests: XCTestCase {
     /// no window and still exercises the real AppleScript round trip
     /// (compile, dispatch to the automation queue, execute, decode).
     func testTrivialFinderScript() async throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["MACLINK_LIVE_TESTS"] == "1",
+                          "live test: set MACLINK_LIVE_TESTS=1 to run")
         let result = try await AutomationService.shared.run(
             #"tell application "Finder" to return name of application "Finder""#,
             timeout: 5
