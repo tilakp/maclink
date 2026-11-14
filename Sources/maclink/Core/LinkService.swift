@@ -86,8 +86,10 @@ final class LinkService {
             return "The stored link is malformed."
         case CaptureError.accessibilityPermissionDenied:
             return "maclink needs Accessibility permission. Check System Settings > Privacy & Security > Accessibility."
+        case AutomationError.scriptError(_, let message):
+            return "\(app) reported an error: \(message)"
         default:
-            return "Something went wrong: \(String(describing: error))"
+            return (error as? LocalizedError)?.errorDescription ?? "Something went wrong: \(String(describing: error))"
         }
     }
 
