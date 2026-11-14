@@ -40,11 +40,14 @@ enum FileRelinker {
 
     // MARK: - Spotlight
 
-    private static func spotlightSearch(name: String, size: Int64?, timeout: TimeInterval = 3) async -> [URL] {
+    @MainActor
+    static func spotlightSearch(name: String, size: Int64?, timeout: TimeInterval = 10) async -> [URL] {
         await withCheckedContinuation { continuation in
-            // Only ever touched on the main queue below, despite not being
-            // Sendable: the notification observer and the timeout fallback
-            // both run on `.main`.
+            // `NSMetadataQuery` must start on a thread with a run loop. This
+            // function is `@MainActor`, so the continuation body, the observer
+            // (queue `.main`) and the timeout all run on the main thread.
+            // `nonisolated(unsafe)` only silences the Sendable warning for
+            // the observer's `@Sendable` closure.
             nonisolated(unsafe) let query = NSMetadataQuery()
             // Spotlight's own query parser (unlike NSPredicate evaluated
             // in-process) doesn't understand the `[c]` case-insensitive
