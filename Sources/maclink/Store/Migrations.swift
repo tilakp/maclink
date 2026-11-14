@@ -63,6 +63,30 @@ enum Migrations {
             }
         }
 
+        migrator.registerMigration("v2") { db in
+            try db.alter(table: "links") { t in
+                t.add(column: "search_text", .text).notNull().defaults(to: "")
+            }
+            // Backfill from the stored JSON. json_extract returns unescaped values;
+            // json_valid guards against a hand-edited bad row, which would otherwise
+            // fail the migration and so the app launch.
+            try db.execute(sql: """
+                UPDATE links SET search_text = CASE WHEN json_valid(payload) THEN TRIM(
+                    COALESCE(json_extract(payload, '$.path'), '') || ' ' ||
+                    COALESCE(json_extract(payload, '$.url'), '') || ' ' ||
+                    COALESCE(json_extract(payload, '$.host'), '') || ' ' ||
+                    COALESCE(json_extract(payload, '$.page_title'), '') || ' ' ||
+                    COALESCE(json_extract(payload, '$.message_id'), '') || ' ' ||
+                    COALESCE(json_extract(payload, '$.subject'), '') || ' ' ||
+                    COALESCE(json_extract(payload, '$.sender'), '') || ' ' ||
+                    COALESCE(json_extract(payload, '$.mailbox'), '') || ' ' ||
+                    COALESCE(json_extract(payload, '$.account'), '') || ' ' ||
+                    COALESCE(json_extract(payload, '$.window_title'), '')
+                ) ELSE '' END
+                """)
+            try db.create(index: "idx_links_updated", on: "links", columns: ["updated_at"])
+        }
+
         return migrator
     }
 }

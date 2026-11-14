@@ -90,6 +90,7 @@ extension LinkRecord: FetchableRecord, PersistableRecord {
         static let openCount = Column("open_count")
         static let repairedAt = Column("repaired_at")
         static let archived = Column("archived")
+        static let searchText = Column("search_text")
     }
 
     init(row: Row) throws {
@@ -139,5 +140,6 @@ extension LinkRecord: FetchableRecord, PersistableRecord {
         container[Columns.openCount] = openCount
         container[Columns.repairedAt] = repairedAt?.timeIntervalSince1970
         container[Columns.archived] = archived
+        container[Columns.searchText] = payload.searchText
     }
 }

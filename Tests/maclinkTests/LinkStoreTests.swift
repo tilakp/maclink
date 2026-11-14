@@ -1,4 +1,5 @@
 import XCTest
+import GRDB
 @testable import maclink
 
 final class LinkStoreTests: XCTestCase {
@@ -182,6 +183,70 @@ final class LinkStoreTests: XCTestCase {
         let fetched = try store.fetch(id: record.id)
         XCTAssertEqual(fetched?.openCount, 1)
         XCTAssertNotNil(fetched?.lastOpenedAt)
+    }
+
+    // MARK: - Search on payload values (C3)
+
+    private func urlRecord(title: String, url: String, host: String?) -> LinkRecord {
+        LinkRecord(
+            title: title,
+            payload: .url(URLPayload(url: url, host: host, browserBundleID: "com.apple.Safari")),
+            captureMethod: .applescript
+        )
+    }
+
+    func testSearchIgnoresJSONKeyNames() throws {
+        try store.insert(urlRecord(title: "Example", url: "https://example.org/a", host: "example.org"))
+        XCTAssertEqual(try store.search("host").count, 0)
+        XCTAssertEqual(try store.search("browser_bundle_id").count, 0)
+        XCTAssertEqual(try store.search("page_title").count, 0)
+    }
+
+    func testSearchMatchesURLsWithSlashes() throws {
+        let record = try store.insert(urlRecord(title: "Swift", url: "https://github.com/apple/swift", host: "github.com"))
+        XCTAssertEqual(try store.search("github.com/apple").map(\.id), [record.id])
+    }
+
+    func testSearchMatchesFilePathWithSlashes() throws {
+        let payload = FilePayload(path: "/Users/x/Documents/report.pdf", displayName: "report.pdf", isDirectory: false)
+        let record = try store.insert(LinkRecord(title: "report.pdf", subtitle: nil, payload: .file(payload), captureMethod: .applescript))
+        XCTAssertEqual(try store.search("Documents/report").map(\.id), [record.id])
+    }
+
+    func testSearchReturnsEachLinkOnceWhenSeveralTagsMatch() throws {
+        try store.insert(mailRecord(subject: "Tagged", messageID: "1@example.com", tags: ["alpha", "alphabet"]))
+        let results = try store.search("alpha")
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(Set(results.first?.tags ?? []), ["alpha", "alphabet"])
+    }
+
+    func testMigrationV2BackfillsSearchText() throws {
+        let path = FileManager.default.temporaryDirectory
+            .appendingPathComponent("maclink-migration-\(UUID().uuidString).sqlite")
+        defer { try? FileManager.default.removeItem(at: path) }
+
+        let goodID = UUID().uuidString.uppercased()
+        do {
+            let dbQueue = try DatabaseQueue(path: path.path)
+            try Migrations.migrator().migrate(dbQueue, upTo: "v1")
+            try dbQueue.write { db in
+                let insert = """
+                    INSERT INTO links (id, resource_type, title, payload, capture_method, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, 'applescript', ?, ?)
+                    """
+                let now = Date().timeIntervalSince1970
+                try db.execute(sql: insert, arguments: [
+                    goodID, "url", "Repo",
+                    #"{"v":1,"url":"https:\/\/github.com\/a\/b","host":"github.com"}"#, now, now
+                ])
+                try db.execute(sql: insert, arguments: [
+                    UUID().uuidString.uppercased(), "url", "Broken", "not json", now, now
+                ])
+            }
+        }
+
+        let migrated = try LinkStore(url: path)
+        XCTAssertEqual(try migrated.search("github.com/a").map { $0.id.uuidString.uppercased() }, [goodID])
     }
 
     func testSetTagsReplacesExistingTags() throws {

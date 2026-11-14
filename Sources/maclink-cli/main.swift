@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import MaclinkShared
 
 // A thin, read-only CLI over maclink's SQLite database (spec §10.3). It is a
 // separate executable from the app on purpose: it opens the database
@@ -56,20 +57,6 @@ struct Link {
     var url: String { "maclink://open/\(id)" }
 }
 
-/// Same escaping `LinkStore.search` uses: `%`/`_` are LIKE wildcards, so a
-/// literal query containing either must not be treated as a pattern.
-func escapedForLike(_ query: String) -> String {
-    var out = ""
-    out.reserveCapacity(query.count)
-    for character in query {
-        if character == "\\" || character == "%" || character == "_" {
-            out.append("\\")
-        }
-        out.append(character)
-    }
-    return out
-}
-
 /// Fetches links matching `whereClause` (ANDed onto `archived = 0`), then
 /// hydrates tags in one follow-up query rather than via GROUP_CONCAT, so a
 /// tag-matching search still returns each link's full tag list, not just the
@@ -81,11 +68,9 @@ func fetchLinks(
     limit: Int
 ) throws -> [Link] {
     let rows = try Row.fetchAll(db, sql: """
-        SELECT DISTINCT links.id AS id, links.title AS title, links.subtitle AS subtitle,
+        SELECT links.id AS id, links.title AS title, links.subtitle AS subtitle,
                links.resource_type AS resource_type, links.created_at AS created_at
         FROM links
-        LEFT JOIN link_tags ON link_tags.link_id = links.id
-        LEFT JOIN tags ON tags.id = link_tags.tag_id
         WHERE links.archived = 0 \(whereClause)
         ORDER BY links.created_at DESC
         LIMIT ?
@@ -213,15 +198,10 @@ func runSearch(_ args: [String]) throws {
         if query.isEmpty {
             return try fetchLinks(db: db, whereClause: "", arguments: [], limit: limit)
         }
-        let like = "%\(escapedForLike(query))%"
         return try fetchLinks(
             db: db,
-            whereClause: """
-                AND (links.title LIKE ? ESCAPE '\\' OR links.subtitle LIKE ? ESCAPE '\\' OR
-                     links.notes LIKE ? ESCAPE '\\' OR links.payload LIKE ? ESCAPE '\\' OR
-                     tags.name LIKE ? ESCAPE '\\')
-                """,
-            arguments: [like, like, like, like, like],
+            whereClause: "AND \(SearchSQL.matchCondition)",
+            arguments: StatementArguments(SearchSQL.arguments(for: query)),
             limit: limit
         )
     }

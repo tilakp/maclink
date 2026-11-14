@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import MaclinkShared
 
 extension Notification.Name {
     /// Posted after any write that changes what search or the Recent menu
@@ -207,22 +208,6 @@ final class LinkStore {
 
     // MARK: - Search
 
-    /// `%` and `_` are wildcards inside a `LIKE` pattern, so a query
-    /// containing either (a filename like `report_final.pdf`, or a bare `%`)
-    /// silently matched far more than the user typed. Escape them, plus the
-    /// escape character itself, and pair this with `ESCAPE '\'` in the SQL.
-    static func escapedForLike(_ query: String) -> String {
-        var out = ""
-        out.reserveCapacity(query.count)
-        for character in query {
-            if character == "\\" || character == "%" || character == "_" {
-                out.append("\\")
-            }
-            out.append(character)
-        }
-        return out
-    }
-
     func search(_ query: String, limit: Int = 100) throws -> [LinkRecord] {
         try dbQueue.read { db in
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -233,19 +218,12 @@ final class LinkStore {
                     ORDER BY created_at DESC LIMIT ?
                     """, arguments: [limit])
             } else {
-                let like = "%\(Self.escapedForLike(trimmed))%"
                 records = try LinkRecord.fetchAll(db, sql: """
-                    SELECT DISTINCT links.* FROM links
-                    LEFT JOIN link_tags ON link_tags.link_id = links.id
-                    LEFT JOIN tags ON tags.id = link_tags.tag_id
-                    WHERE links.archived = 0 AND (
-                        links.title LIKE ? ESCAPE '\\' OR links.subtitle LIKE ? ESCAPE '\\' OR
-                        links.notes LIKE ? ESCAPE '\\' OR links.payload LIKE ? ESCAPE '\\' OR
-                        tags.name LIKE ? ESCAPE '\\'
-                    )
+                    SELECT links.* FROM links
+                    WHERE links.archived = 0 AND \(SearchSQL.matchCondition)
                     ORDER BY links.created_at DESC
                     LIMIT ?
-                    """, arguments: [like, like, like, like, like, limit])
+                    """, arguments: StatementArguments(SearchSQL.arguments(for: trimmed)) + [limit])
             }
             try self.hydrateTags(&records, db: db)
             return records

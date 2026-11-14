@@ -26,7 +26,7 @@ export interface LinkRow {
 }
 
 /**
- * Mirrors `LinkStore.escapedForLike` in the Swift app: backslash-escape the
+ * Mirrors `SearchSQL.escapedForLike` in the Swift app: backslash-escape the
  * `LIKE` metacharacters (so a filename like `report_final.pdf` or a bare
  * `%` is treated as literal text, not a wildcard), then double any single
  * quotes for safe embedding in the SQL text. The `sqlite3` CLI has no bound
@@ -41,10 +41,10 @@ function escapeLikeAndQuote(raw: string): string {
 const SELECT = `
   SELECT links.id, links.resource_type, links.title, links.subtitle,
          links.payload, links.degraded, links.created_at,
-         GROUP_CONCAT(tags.name, ' ') AS tags
+         (SELECT GROUP_CONCAT(tags.name, ' ') FROM link_tags
+            JOIN tags ON tags.id = link_tags.tag_id
+            WHERE link_tags.link_id = links.id) AS tags
   FROM links
-  LEFT JOIN link_tags ON link_tags.link_id = links.id
-  LEFT JOIN tags ON tags.id = link_tags.tag_id
 `;
 
 export function queryLinks(query: string, limit = 100): LinkRow[] {
@@ -52,18 +52,19 @@ export function queryLinks(query: string, limit = 100): LinkRow[] {
 
   const sql =
     trimmed === ""
-      ? `${SELECT} WHERE links.archived = 0 GROUP BY links.id ORDER BY links.created_at DESC LIMIT ${limit};`
+      ? `${SELECT} WHERE links.archived = 0 ORDER BY links.created_at DESC LIMIT ${limit};`
       : (() => {
           const pattern = `%${escapeLikeAndQuote(trimmed)}%`;
+          // Keep in step with Sources/MaclinkShared/SearchSQL.swift.
           return `${SELECT}
             WHERE links.archived = 0 AND (
               links.title LIKE '${pattern}' ESCAPE '\\' OR
               links.subtitle LIKE '${pattern}' ESCAPE '\\' OR
               links.notes LIKE '${pattern}' ESCAPE '\\' OR
-              links.payload LIKE '${pattern}' ESCAPE '\\' OR
-              tags.name LIKE '${pattern}' ESCAPE '\\'
+              links.search_text LIKE '${pattern}' ESCAPE '\\' OR
+              EXISTS (SELECT 1 FROM link_tags JOIN tags ON tags.id = link_tags.tag_id
+                      WHERE link_tags.link_id = links.id AND tags.name LIKE '${pattern}' ESCAPE '\\')
             )
-            GROUP BY links.id
             ORDER BY links.created_at DESC
             LIMIT ${limit};`;
         })();

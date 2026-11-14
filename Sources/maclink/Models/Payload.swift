@@ -18,6 +18,19 @@ enum Payload: Equatable {
         }
     }
 
+    /// The payload values that search matches (spec §9.3 `payload_text`):
+    /// values only, never JSON key names, and with `/` unescaped.
+    var searchText: String {
+        let values: [String?]
+        switch self {
+        case .file(let p): values = [p.path]
+        case .mail(let p): values = [p.messageID.hasPrefix("unknown-") ? nil : p.messageID, p.subject, p.sender, p.mailbox, p.account]
+        case .url(let p): values = [p.url, p.host, p.pageTitle]
+        case .generic(let p): values = [p.windowTitle]
+        }
+        return values.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
     func encodedJSON() throws -> String {
         let encoder = JSONEncoder()
         let data: Data
