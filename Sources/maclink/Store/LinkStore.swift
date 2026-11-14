@@ -82,11 +82,11 @@ final class LinkStore {
 
     func fetchAll(includeArchived: Bool = false, limit: Int = 100) throws -> [LinkRecord] {
         try dbQueue.read { db in
-            var request = LinkRecord.order(LinkRecord.Columns.updatedAt.desc).limit(limit)
-            if !includeArchived {
-                request = request.filter(LinkRecord.Columns.archived == false)
-            }
-            var records = try request.fetchAll(db)
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT * FROM links \(includeArchived ? "" : "WHERE archived = 0")
+                ORDER BY updated_at DESC LIMIT ?
+                """, arguments: [limit])
+            var records = Self.decodeSkippingBadRows(rows)
             try self.hydrateTags(&records, db: db)
             return records
         }
@@ -236,22 +236,36 @@ final class LinkStore {
     func search(_ query: String, limit: Int = 100) throws -> [LinkRecord] {
         try dbQueue.read { db in
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            var records: [LinkRecord]
+            let rows: [Row]
             if trimmed.isEmpty {
-                records = try LinkRecord.fetchAll(db, sql: """
+                rows = try Row.fetchAll(db, sql: """
                     SELECT * FROM links WHERE archived = 0
                     ORDER BY updated_at DESC LIMIT ?
                     """, arguments: [limit])
             } else {
-                records = try LinkRecord.fetchAll(db, sql: """
+                rows = try Row.fetchAll(db, sql: """
                     SELECT links.* FROM links
                     WHERE links.archived = 0 AND \(SearchSQL.matchCondition)
                     ORDER BY links.updated_at DESC
                     LIMIT ?
                     """, arguments: StatementArguments(SearchSQL.arguments(for: trimmed)) + [limit])
             }
+            var records = Self.decodeSkippingBadRows(rows)
             try self.hydrateTags(&records, db: db)
             return records
+        }
+    }
+
+    /// Decodes rows one by one and skips (and logs) any that fail, so one bad
+    /// payload can't empty every list.
+    private static func decodeSkippingBadRows(_ rows: [Row]) -> [LinkRecord] {
+        rows.compactMap { row in
+            do {
+                return try LinkRecord(row: row)
+            } catch {
+                Log.db.error("skipping undecodable link row \(String(describing: row["id"] as String?), privacy: .public): \(String(describing: error), privacy: .public)")
+                return nil
+            }
         }
     }
 

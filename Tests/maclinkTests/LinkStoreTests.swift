@@ -296,6 +296,23 @@ final class LinkStoreTests: XCTestCase {
         XCTAssertEqual(try migrated.search("github.com/a").map { $0.id.uuidString.uppercased() }, [goodID])
     }
 
+    // MARK: - Lenient decoding (C5)
+
+    func testUndecodableRowIsSkippedNotFatal() throws {
+        try store.insert(mailRecord(subject: "One", messageID: "1@example.com"))
+        try store.insert(mailRecord(subject: "Two", messageID: "2@example.com"))
+        try store.dbQueue.write { db in
+            let now = Date().timeIntervalSince1970
+            try db.execute(sql: """
+                INSERT INTO links (id, resource_type, title, payload, capture_method, created_at, updated_at)
+                VALUES (?, 'file', 'Bad', '{"v":1}', 'applescript', ?, ?)
+                """, arguments: [UUID().uuidString.uppercased(), now, now])
+        }
+
+        XCTAssertEqual(Set(try store.fetchAll().map(\.title)), ["One", "Two"])
+        XCTAssertEqual(Set(try store.search("").map(\.title)), ["One", "Two"])
+    }
+
     func testSetTagsReplacesExistingTags() throws {
         let record = try store.insert(mailRecord())
         try store.setTags(["work", "urgent"], for: record.id)
