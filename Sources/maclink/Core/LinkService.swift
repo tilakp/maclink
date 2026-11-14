@@ -107,21 +107,7 @@ final class LinkService {
         Task {
             do {
                 let resources = try await CaptureEngine.shared.capture(frontApp: frontApp)
-                var copiedURLs: [String] = []
-                var stored: [(record: LinkRecord, isNew: Bool)] = []
-                for resource in resources {
-                    let result = try storeAndDedupe(resource)
-                    copiedURLs.append(Self.formatClipboardEntry(url: result.maclinkURL, title: result.record.title))
-                    stored.append((result.record, result.isNew))
-                }
-                if !copiedURLs.isEmpty {
-                    writeToClipboard(copiedURLs.joined(separator: "\n"))
-                }
-                recordDiagnostic("capture: \(resources.count) link(s) from \(frontApp.bundleIdentifier ?? "?")")
-                let finalStored = stored
-                await MainActor.run {
-                    CaptureToastController.shared.show(records: finalStored, previousClipboard: previousClipboard)
-                }
+                try await finishCapture(resources, previousClipboard: previousClipboard, source: frontApp.bundleIdentifier ?? "?")
             } catch CaptureError.unsupportedApp(let bundleID) {
                 recordDiagnostic("capture: no capturer for \(bundleID) yet")
                 NotificationService.notifyFailure(
@@ -141,6 +127,44 @@ final class LinkService {
                     body: Self.friendlyMessage(for: error, sourceAppName: frontApp.localizedName)
                 )
             }
+        }
+    }
+
+    /// Captures files handed over by the Finder service (spec §7.2 resource
+    /// building, same dedupe, clipboard and toast as a hotkey capture).
+    func captureFiles(_ urls: [URL]) {
+        let previousClipboard = NSPasteboard.general.string(forType: .string)
+        let resources = urls.compactMap { FinderCapturer.resource(forPath: $0.path, method: .service) }
+        Task {
+            do {
+                try await finishCapture(resources, previousClipboard: previousClipboard, source: "service")
+            } catch {
+                NotificationService.notifyFailure(
+                    title: "Capture failed",
+                    body: Self.friendlyMessage(for: error, sourceAppName: "Finder")
+                )
+            }
+        }
+    }
+
+    /// Stores the captured resources with dedupe, writes the clipboard, and
+    /// shows the toast. Shared by the hotkey and the Finder service.
+    private func finishCapture(_ resources: [CapturedResource], previousClipboard: String?, source: String) async throws {
+        guard !resources.isEmpty else { throw CaptureError.noSelection }
+        var copiedURLs: [String] = []
+        var stored: [(record: LinkRecord, isNew: Bool)] = []
+        for resource in resources {
+            let result = try storeAndDedupe(resource)
+            copiedURLs.append(Self.formatClipboardEntry(url: result.maclinkURL, title: result.record.title))
+            stored.append((result.record, result.isNew))
+        }
+        if !copiedURLs.isEmpty {
+            writeToClipboard(copiedURLs.joined(separator: "\n"))
+        }
+        recordDiagnostic("capture: \(resources.count) link(s) from \(source)")
+        let finalStored = stored
+        await MainActor.run {
+            CaptureToastController.shared.show(records: finalStored, previousClipboard: previousClipboard)
         }
     }
 

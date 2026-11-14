@@ -2,6 +2,7 @@ import AppKit
 import OSLog
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let servicesProvider = ServicesProvider()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Must register here (not didFinishLaunching): if maclink is *launched by*
@@ -18,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         StatusItemController.shared.setup()
+        NSApp.servicesProvider = servicesProvider
+        NSUpdateDynamicServices()
         HotkeyService.shared.start()
         NotificationService.requestAuthorizationIfNeeded()
         Log.app.info("maclink ready")
