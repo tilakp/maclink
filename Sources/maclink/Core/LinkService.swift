@@ -17,14 +17,14 @@ final class LinkService {
         case .open(let id, let reveal):
             open(id: id, reveal: reveal)
         case .show(let id):
-            recordDiagnostic("show id=\(id.uuidString)")
+            Log.resolve.info("show id=\(id.uuidString, privacy: .public)")
         case .search(let query):
             let results = (try? store.search(query)) ?? []
-            recordDiagnostic("search q=\(query) -> \(results.count) result(s)")
+            Log.resolve.info("search q=\(query, privacy: .private) -> \(results.count) result(s)")
         case .capture:
             captureFromHotkey()
         case .unrecognized(let raw):
-            recordDiagnostic("unrecognized: \(raw)")
+            Log.resolve.info("unrecognized: \(raw, privacy: .private)")
         }
     }
 
@@ -32,7 +32,7 @@ final class LinkService {
     /// `maclink://open` URL route, the search dropdown, and the Recent menu.
     func open(id: UUID, reveal: Bool = false) {
         guard let record = try? store.fetch(id: id) else {
-            recordDiagnostic("open: no such link \(id.uuidString)")
+            Log.resolve.info("open: no such link \(id.uuidString, privacy: .public)")
             NotificationService.notifyFailure(
                 title: "Link not found",
                 body: "This maclink doesn't exist. The database may have been reset or the link deleted."
@@ -50,15 +50,15 @@ final class LinkService {
                     try? store.update(repaired)
                 }
                 try? store.recordOpened(id: id)
-                recordDiagnostic("open: resolved \(record.resourceType.rawValue) \"\(record.title)\"")
+                Log.resolve.info("open: resolved \(record.resourceType.rawValue, privacy: .public) \"\(record.title, privacy: .private)\"")
             } catch ResolveError.linkDeleted {
-                recordDiagnostic("open: link \"\(record.title)\" deleted after failed relink")
+                Log.resolve.error("open: link \"\(record.title, privacy: .private)\" deleted after failed relink")
                 NotificationService.notifyFailure(
                     title: "Link deleted",
                     body: "\"\(record.title)\" couldn't be found and was removed."
                 )
             } catch {
-                recordDiagnostic("open: failed to resolve \"\(record.title)\": \(error)")
+                Log.resolve.error("open: failed to resolve \"\(record.title, privacy: .private)\": \(String(describing: error), privacy: .public)")
                 NotificationService.notifyFailure(
                     title: "Couldn't open \"\(record.title)\"",
                     body: Self.friendlyMessage(for: error, sourceAppName: record.sourceAppName)
@@ -100,7 +100,7 @@ final class LinkService {
         // itself, so this stays correct even when triggered via the
         // maclink://capture URL route rather than a real hotkey yet.
         guard let frontApp = NSWorkspace.shared.frontmostApplication else {
-            recordDiagnostic("capture: no frontmost app")
+            Log.capture.info("capture: no frontmost app")
             return
         }
 
@@ -111,19 +111,19 @@ final class LinkService {
                 let resources = try await CaptureEngine.shared.capture(frontApp: frontApp)
                 try await finishCapture(resources, previousClipboard: previousClipboard, source: frontApp.bundleIdentifier ?? "?")
             } catch CaptureError.unsupportedApp(let bundleID) {
-                recordDiagnostic("capture: no capturer for \(bundleID) yet")
+                Log.capture.info("capture: no capturer for \(bundleID, privacy: .public) yet")
                 NotificationService.notifyFailure(
                     title: "Can't capture from \(frontApp.localizedName ?? bundleID)",
                     body: "maclink doesn't support this app yet."
                 )
             } catch CaptureError.noSelection {
-                recordDiagnostic("capture: nothing selected in \(frontApp.bundleIdentifier ?? "?")")
+                Log.capture.info("capture: nothing selected in \(frontApp.bundleIdentifier ?? "?", privacy: .public)")
                 NotificationService.notifyFailure(
                     title: "Nothing to capture",
                     body: "Select something in \(frontApp.localizedName ?? "the frontmost app") first."
                 )
             } catch {
-                recordDiagnostic("capture failed: \(error)")
+                Log.capture.error("capture failed: \(String(describing: error), privacy: .public)")
                 NotificationService.notifyFailure(
                     title: "Capture failed",
                     body: Self.friendlyMessage(for: error, sourceAppName: frontApp.localizedName)
@@ -163,7 +163,7 @@ final class LinkService {
         if !copiedURLs.isEmpty {
             writeToClipboard(copiedURLs.joined(separator: "\n"))
         }
-        recordDiagnostic("capture: \(resources.count) link(s) from \(source)")
+        Log.capture.info("capture: \(resources.count) link(s) from \(source, privacy: .public)")
         let finalStored = stored
         await MainActor.run {
             CaptureToastController.shared.show(records: finalStored, previousClipboard: previousClipboard)
@@ -183,7 +183,7 @@ final class LinkService {
     private func storeAndDedupe(_ resource: CapturedResource) throws -> (record: LinkRecord, isNew: Bool, maclinkURL: String) {
         if let existing = try store.findExisting(for: resource.payload) {
             try store.update(existing) // bumps updated_at
-            recordDiagnostic("capture: existing link reused (\(existing.tags.count) tags)")
+            Log.capture.info("capture: existing link reused (\(existing.tags.count) tags)")
             return (existing, false, "maclink://open/\(existing.id.uuidString)")
         }
         let record = LinkRecord(
@@ -257,7 +257,7 @@ final class LinkService {
         } catch {
             // The row stays visible after the list refreshes, which looks
             // exactly like the keystroke never registered. Say so instead.
-            recordDiagnostic("archive failed for \(record.id.uuidString): \(error)")
+            Log.db.error("archive failed for \(record.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
             NotificationService.notifyFailure(
                 title: "Couldn't archive \"\(record.title)\"",
                 body: Self.friendlyMessage(for: error, sourceAppName: record.sourceAppName)
@@ -270,7 +270,7 @@ final class LinkService {
         do {
             try store.delete(id: record.id)
         } catch {
-            recordDiagnostic("delete failed for \(record.id.uuidString): \(error)")
+            Log.db.error("delete failed for \(record.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
             NotificationService.notifyFailure(
                 title: "Couldn't delete \"\(record.title)\"",
                 body: Self.friendlyMessage(for: error, sourceAppName: record.sourceAppName)
@@ -282,24 +282,5 @@ final class LinkService {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(string, forType: .string)
-    }
-
-    /// Temporary: appends a line to a plain-text log so behavior can be
-    /// verified from the terminal before there's a UI to look at. Remove
-    /// once the capture toast (build order step 11) exists.
-    private func recordDiagnostic(_ message: String) {
-        let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
-        let url = Paths.appSupportDirectory.appendingPathComponent("diagnostic.log")
-        if let data = line.data(using: .utf8) {
-            if FileManager.default.fileExists(atPath: url.path) {
-                if let handle = try? FileHandle(forWritingTo: url) {
-                    handle.seekToEndOfFile()
-                    handle.write(data)
-                    try? handle.close()
-                }
-            } else {
-                try? data.write(to: url)
-            }
-        }
     }
 }
