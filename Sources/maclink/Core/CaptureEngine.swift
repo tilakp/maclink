@@ -9,7 +9,8 @@ final class CaptureEngine {
     private let capturers: [Capturer] = [
         FinderCapturer(),
         MailCapturer(),
-        SafariCapturer()
+        SafariCapturer(),
+        ChromiumCapturer()
     ]
     private let genericCapturer = GenericCapturer()
 
