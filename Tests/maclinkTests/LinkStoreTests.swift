@@ -185,6 +185,47 @@ final class LinkStoreTests: XCTestCase {
         XCTAssertNotNil(fetched?.lastOpenedAt)
     }
 
+    // MARK: - File repair (C2)
+
+    private func fileRecord(path: String, tags: [String] = []) -> LinkRecord {
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        return LinkRecord(
+            title: name,
+            payload: .file(FilePayload(path: path, displayName: name, isDirectory: false)),
+            bookmarkData: Data([1, 2, 3]),
+            captureMethod: .applescript,
+            tags: tags
+        )
+    }
+
+    func testApplyRepairKeepsTagsArchiveAndUpdatedAt() throws {
+        let record = try store.insert(fileRecord(path: "/tmp/old/a.txt", tags: ["a"]))
+        try store.setArchived(true, id: record.id)
+        let before = try XCTUnwrap(store.fetch(id: record.id))
+
+        let newPayload = FilePayload(path: "/tmp/new/b.txt", displayName: "b.txt", isDirectory: false)
+        try store.applyRepair(id: record.id, payload: .file(newPayload), bookmarkData: nil,
+                              subtitle: "/tmp/new", title: "b.txt")
+
+        let after = try XCTUnwrap(store.fetch(id: record.id))
+        XCTAssertEqual(after.tags, ["a"])
+        XCTAssertTrue(after.archived)
+        XCTAssertEqual(after.updatedAt, before.updatedAt)
+        XCTAssertEqual(after.title, "b.txt")
+        guard case .file(let payload) = after.payload else { return XCTFail("expected file payload") }
+        XCTAssertEqual(payload.path, "/tmp/new/b.txt")
+        XCTAssertNotNil(after.repairedAt)
+        XCTAssertEqual(after.bookmarkData, Data([1, 2, 3]))
+    }
+
+    func testApplyRepairOnDeletedRowDoesNotThrow() throws {
+        let record = try store.insert(fileRecord(path: "/tmp/old/a.txt"))
+        try store.delete(id: record.id)
+        let payload = FilePayload(path: "/tmp/new/a.txt", displayName: "a.txt", isDirectory: false)
+        XCTAssertNoThrow(try store.applyRepair(id: record.id, payload: .file(payload), bookmarkData: nil,
+                                               subtitle: "/tmp/new", title: "a.txt"))
+    }
+
     // MARK: - Search on payload values (C3)
 
     private func urlRecord(title: String, url: String, host: String?) -> LinkRecord {

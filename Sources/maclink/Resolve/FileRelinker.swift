@@ -9,6 +9,7 @@ enum FileRelinker {
         case relinked(URL)
         case deleted
         case cancelled
+        case failed(Error)
     }
 
     @MainActor
@@ -17,15 +18,20 @@ enum FileRelinker {
 
         // Step 3: name + size. A single hit here is a strong enough match to
         // lead with, ahead of the broader name-only search below.
+        // A file the user rejects here is not offered again in step 4.
+        var rejected: URL?
         if let size = payload.byteSize {
             let hits = await spotlightSearch(name: payload.displayName, size: size)
-            if hits.count == 1, confirmRelink(to: hits[0], originalPath: payload.path) {
-                return .relinked(hits[0])
+            if hits.count == 1 {
+                if confirmRelink(to: hits[0], originalPath: payload.path) {
+                    return .relinked(hits[0])
+                }
+                rejected = hits[0]
             }
         }
 
         // Step 4: name only. Multiple hits get a picker instead of guessing.
-        let nameHits = await spotlightSearch(name: payload.displayName, size: nil)
+        let nameHits = await spotlightSearch(name: payload.displayName, size: nil).filter { $0 != rejected }
         if nameHits.count == 1 {
             if confirmRelink(to: nameHits[0], originalPath: payload.path) {
                 return .relinked(nameHits[0])
@@ -107,13 +113,19 @@ enum FileRelinker {
         let alert = NSAlert()
         alert.messageText = "Multiple matches found"
         alert.informativeText = "Choose which file this link should point to:"
+        // A common name such as README.md can match thousands of files.
+        var shown = candidates
+        if candidates.count > 50 {
+            shown = Array(candidates.sorted { $0.path < $1.path }.prefix(50))
+            alert.informativeText = "Showing 50 of \(candidates.count) files with this name. Choose which file this link should point to:"
+        }
         let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 380, height: 24))
-        popup.addItems(withTitles: candidates.map(\.path))
+        popup.addItems(withTitles: shown.map(\.path))
         alert.accessoryView = popup
         alert.addButton(withTitle: "Relink")
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return nil }
-        return candidates[popup.indexOfSelectedItem]
+        return shown[popup.indexOfSelectedItem]
     }
 
     private static func giveUp(payload: FilePayload, linkID: UUID) -> Outcome {
@@ -133,8 +145,12 @@ enum FileRelinker {
             guard panel.runModal() == .OK, let url = panel.url else { return .cancelled }
             return .relinked(url)
         case .alertSecondButtonReturn:
-            try? LinkStore.shared.delete(id: linkID)
-            return .deleted
+            do {
+                try LinkStore.shared.delete(id: linkID)
+                return .deleted
+            } catch {
+                return .failed(error)
+            }
         default:
             return .cancelled
         }

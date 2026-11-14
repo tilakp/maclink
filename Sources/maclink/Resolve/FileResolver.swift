@@ -9,7 +9,6 @@ struct FileResolver: Resolver {
             throw ResolveError.notImplemented(record.resourceType)
         }
 
-        var updatedRecord: LinkRecord?
         var resolvedURL: URL?
 
         if let bookmarkData = record.bookmarkData {
@@ -30,7 +29,7 @@ struct FileResolver: Resolver {
                 let moved = url.path != payload.path
                 if stale || moved {
                     Log.resolve.info("repairing file link \(record.id.uuidString, privacy: .public) (stale=\(stale, privacy: .public) moved=\(moved, privacy: .public))")
-                    updatedRecord = Self.repairedRecord(from: record, payload: payload, newURL: url, regenerateBookmark: stale)
+                    Self.persistRepair(of: record, payload: payload, newURL: url, regenerateBookmark: stale)
                 }
             }
         }
@@ -48,11 +47,13 @@ struct FileResolver: Resolver {
             case .relinked(let url):
                 Log.resolve.info("relinked file \(record.id.uuidString, privacy: .public) to \(url.path, privacy: .public)")
                 resolvedURL = url
-                updatedRecord = Self.repairedRecord(from: record, payload: payload, newURL: url, regenerateBookmark: true)
+                Self.persistRepair(of: record, payload: payload, newURL: url, regenerateBookmark: true)
             case .deleted:
                 throw ResolveError.linkDeleted
             case .cancelled:
                 throw ResolveError.fileNotFound
+            case .failed(let error):
+                throw error
             }
         }
 
@@ -68,24 +69,51 @@ struct FileResolver: Resolver {
             }
         }
 
-        return updatedRecord
+        // Repairs are written above through `LinkStore.applyRepair`, so
+        // there is no record for the caller to write back.
+        return nil
     }
 
-    private static func repairedRecord(
-        from record: LinkRecord, payload: FilePayload, newURL: URL, regenerateBookmark: Bool
-    ) -> LinkRecord {
-        var repaired = record
-        if regenerateBookmark, let freshData = try? newURL.bookmarkData(
-            options: [], includingResourceValuesForKeys: [.nameKey, .contentTypeKey], relativeTo: nil
-        ) {
-            repaired.bookmarkData = freshData
+    /// Writes the repair with `LinkStore.applyRepair`. A failed write is
+    /// logged only: the open must still happen.
+    private static func persistRepair(
+        of record: LinkRecord, payload: FilePayload, newURL: URL, regenerateBookmark: Bool
+    ) {
+        let newPayload = repairedPayload(from: payload, newURL: newURL)
+        let bookmark = regenerateBookmark
+            ? try? newURL.bookmarkData(options: [], includingResourceValuesForKeys: [.nameKey, .contentTypeKey], relativeTo: nil)
+            : nil
+        // Keep a title the user changed; follow the file name otherwise.
+        let title = record.title == payload.displayName ? newURL.lastPathComponent : record.title
+        let subtitle = newURL.deletingLastPathComponent().path
+        do {
+            try LinkStore.shared.applyRepair(
+                id: record.id, payload: .file(newPayload), bookmarkData: bookmark, subtitle: subtitle, title: title
+            )
+        } catch {
+            Log.db.error("applyRepair failed for \(record.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
         }
-        var repairedPayload = payload
-        repairedPayload.path = newURL.path
-        repairedPayload.displayName = newURL.lastPathComponent
-        repaired.payload = .file(repairedPayload)
-        repaired.subtitle = newURL.deletingLastPathComponent().path
-        repaired.repairedAt = Date()
+    }
+
+    /// The file payload after a repair: path and name from `newURL`, and fresh
+    /// identity fields (size, inode, volume, type) read from disk so dedupe by
+    /// volume+inode keeps matching the file.
+    static func repairedPayload(from payload: FilePayload, newURL: URL) -> FilePayload {
+        var repaired = payload
+        repaired.path = newURL.path
+        repaired.displayName = newURL.lastPathComponent
+        let values = try? newURL.resourceValues(forKeys: [
+            .isDirectoryKey, .fileSizeKey, .contentTypeKey, .volumeNameKey, .volumeUUIDStringKey
+        ])
+        var statBuf = stat()
+        let inode: Int64? = stat(newURL.path, &statBuf) == 0 ? Int64(statBuf.st_ino) : nil
+
+        repaired.isDirectory = values?.isDirectory ?? payload.isDirectory
+        repaired.byteSize = values?.fileSize.map(Int64.init) ?? payload.byteSize
+        repaired.uti = values?.contentType?.identifier ?? payload.uti
+        repaired.volumeName = values?.volumeName ?? payload.volumeName
+        repaired.volumeUUID = values?.volumeUUIDString ?? payload.volumeUUID
+        repaired.inode = inode ?? payload.inode
         return repaired
     }
 }

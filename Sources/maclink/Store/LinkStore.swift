@@ -135,6 +135,31 @@ final class LinkStore {
         }
     }
 
+    /// Writes a file-link repair (spec §7.6) without touching tags, notes,
+    /// archive state or `updated_at`. A relink can sit behind a modal alert for
+    /// minutes; a full-row `update` from a value fetched before that would
+    /// overwrite anything the user changed meanwhile. `bookmarkData == nil`
+    /// keeps the stored bookmark.
+    func applyRepair(id: UUID, payload: Payload, bookmarkData: Data?, subtitle: String?, title: String) throws {
+        let changed = try dbQueue.write { db -> Int in
+            try db.execute(
+                sql: """
+                    UPDATE links
+                    SET payload = ?, search_text = ?, payload_blob = COALESCE(?, payload_blob),
+                        subtitle = ?, title = ?, repaired_at = ?
+                    WHERE id = ?
+                    """,
+                arguments: [try payload.encodedJSON(), payload.searchText, bookmarkData, subtitle, title,
+                            Date().timeIntervalSince1970, id.uuidString.uppercased()]
+            )
+            return db.changesCount
+        }
+        if changed == 0 {
+            Log.db.info("applyRepair: link \(id.uuidString, privacy: .public) no longer exists")
+        }
+        notifyChanged()
+    }
+
     // MARK: - Tags
 
     private func slug(_ name: String) -> String {

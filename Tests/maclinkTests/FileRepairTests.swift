@@ -2,6 +2,24 @@ import XCTest
 @testable import maclink
 
 final class FileRepairTests: XCTestCase {
+    func testRepairedPayloadRefreshesIdentity() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("maclink-repair-\(UUID().uuidString).txt")
+        try Data("hello".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let old = FilePayload(path: "/nowhere/old.txt", displayName: "old.txt", isDirectory: false,
+                              byteSize: 999, inode: 1)
+        let repaired = FileResolver.repairedPayload(from: old, newURL: url)
+
+        var statBuf = stat()
+        XCTAssertEqual(stat(url.path, &statBuf), 0)
+        XCTAssertEqual(repaired.path, url.path)
+        XCTAssertEqual(repaired.displayName, url.lastPathComponent)
+        XCTAssertEqual(repaired.byteSize, 5)
+        XCTAssertEqual(repaired.inode, Int64(statBuf.st_ino))
+    }
+
     func testSpotlightFindsThisTestFile() async throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["MACLINK_LIVE_TESTS"] == "1",
                           "live test: set MACLINK_LIVE_TESTS=1 to run")
