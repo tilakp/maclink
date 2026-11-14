@@ -53,8 +53,8 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
                 LinkService.shared.open(id: record.id)
                 if self?.isPinned != true { self?.closeSearchDropdown() }
             },
-            onCopy: { record in
-                LinkService.shared.copy(record, as: .link)
+            onCopy: { record, kind in
+                LinkService.shared.copy(record, as: kind)
             },
             onReveal: { [weak self] record in
                 LinkService.shared.open(id: record.id, reveal: true)
