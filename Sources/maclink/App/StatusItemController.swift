@@ -54,7 +54,7 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
                 if self?.isPinned != true { self?.closeSearchDropdown() }
             },
             onCopy: { record in
-                LinkService.shared.copyLinkToClipboard(record)
+                LinkService.shared.copy(record, as: .link)
             },
             onReveal: { [weak self] record in
                 LinkService.shared.open(id: record.id, reveal: true)
@@ -234,7 +234,7 @@ final class StatusItemController: NSObject, ObservableObject, NSMenuDelegate {
         guard let id = sender.representedObject as? UUID else { return }
         // ⌥-click copies instead of opening (spec §9.1).
         if NSEvent.modifierFlags.contains(.option), let record = try? LinkStore.shared.fetch(id: id) {
-            LinkService.shared.copyLinkToClipboard(record)
+            LinkService.shared.copy(record, as: .link)
         } else {
             LinkService.shared.open(id: id)
         }

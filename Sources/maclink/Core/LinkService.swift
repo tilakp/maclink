@@ -144,12 +144,12 @@ final class LinkService {
         }
     }
 
+    private static var currentFormat: ClipboardFormat {
+        UserDefaults.standard.string(forKey: "clipboardFormat").flatMap(ClipboardFormat.init) ?? .raw
+    }
+
     private static func formatClipboardEntry(url: String, title: String) -> String {
-        switch UserDefaults.standard.string(forKey: "clipboardFormat").flatMap(ClipboardFormat.init) ?? .raw {
-        case .raw: return url
-        case .org: return "[[\(url)][\(title)]]"
-        case .markdown: return "[\(title)](\(url))"
-        }
+        ClipboardFormatter.format(url: url, title: title, as: Self.currentFormat)
     }
 
     /// Inserts a captured resource, or bumps the existing record if one
@@ -198,8 +198,13 @@ final class LinkService {
         }
     }
 
-    func copyLinkToClipboard(_ record: LinkRecord) {
-        writeToClipboard("maclink://open/\(record.id.uuidString)")
+    /// Copies one record. Returns false (and writes nothing) when `kind`
+    /// doesn't apply to this record, for example a file URL for an email.
+    @discardableResult
+    func copy(_ record: LinkRecord, as kind: CopyKind) -> Bool {
+        guard let text = ClipboardFormatter.text(for: record, kind: kind, format: Self.currentFormat) else { return false }
+        writeToClipboard(text)
+        return true
     }
 
     /// Hides the link from search/recent without losing it. Reversible.
