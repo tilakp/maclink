@@ -10,9 +10,11 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.29.0")
     ],
     targets: [
+        .target(name: "MaclinkShared", path: "Sources/MaclinkShared"),
         .executableTarget(
             name: "maclink",
             dependencies: [
+                "MaclinkShared",
                 .product(name: "GRDB", package: "GRDB.swift")
             ],
             path: "Sources/maclink"
@@ -20,13 +22,14 @@ let package = Package(
         .executableTarget(
             name: "maclink-cli",
             dependencies: [
+                "MaclinkShared",
                 .product(name: "GRDB", package: "GRDB.swift")
             ],
             path: "Sources/maclink-cli"
         ),
         .testTarget(
             name: "maclinkTests",
-            dependencies: ["maclink"],
+            dependencies: ["maclink", "MaclinkShared"],
             path: "Tests/maclinkTests"
         )
     ]

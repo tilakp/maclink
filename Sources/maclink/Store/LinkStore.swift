@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import MaclinkShared
 
 extension Notification.Name {
     /// Posted after any write that changes what search or the Recent menu
@@ -81,11 +82,11 @@ final class LinkStore {
 
     func fetchAll(includeArchived: Bool = false, limit: Int = 100) throws -> [LinkRecord] {
         try dbQueue.read { db in
-            var request = LinkRecord.order(LinkRecord.Columns.createdAt.desc).limit(limit)
-            if !includeArchived {
-                request = request.filter(LinkRecord.Columns.archived == false)
-            }
-            var records = try request.fetchAll(db)
+            let rows = try Row.fetchAll(db, sql: """
+                SELECT * FROM links \(includeArchived ? "" : "WHERE archived = 0")
+                ORDER BY updated_at DESC LIMIT ?
+                """, arguments: [limit])
+            var records = Self.decodeSkippingBadRows(rows)
             try self.hydrateTags(&records, db: db)
             return records
         }
@@ -132,6 +133,31 @@ final class LinkStore {
                 arguments: [Date().timeIntervalSince1970, id.uuidString.uppercased()]
             )
         }
+    }
+
+    /// Writes a file-link repair (spec §7.6) without touching tags, notes,
+    /// archive state or `updated_at`. A relink can sit behind a modal alert for
+    /// minutes; a full-row `update` from a value fetched before that would
+    /// overwrite anything the user changed meanwhile. `bookmarkData == nil`
+    /// keeps the stored bookmark.
+    func applyRepair(id: UUID, payload: Payload, bookmarkData: Data?, subtitle: String?, title: String) throws {
+        let changed = try dbQueue.write { db -> Int in
+            try db.execute(
+                sql: """
+                    UPDATE links
+                    SET payload = ?, search_text = ?, payload_blob = COALESCE(?, payload_blob),
+                        subtitle = ?, title = ?, repaired_at = ?
+                    WHERE id = ?
+                    """,
+                arguments: [try payload.encodedJSON(), payload.searchText, bookmarkData, subtitle, title,
+                            Date().timeIntervalSince1970, id.uuidString.uppercased()]
+            )
+            return db.changesCount
+        }
+        if changed == 0 {
+            Log.db.info("applyRepair: link \(id.uuidString, privacy: .public) no longer exists")
+        }
+        notifyChanged()
     }
 
     // MARK: - Tags
@@ -207,48 +233,39 @@ final class LinkStore {
 
     // MARK: - Search
 
-    /// `%` and `_` are wildcards inside a `LIKE` pattern, so a query
-    /// containing either (a filename like `report_final.pdf`, or a bare `%`)
-    /// silently matched far more than the user typed. Escape them, plus the
-    /// escape character itself, and pair this with `ESCAPE '\'` in the SQL.
-    static func escapedForLike(_ query: String) -> String {
-        var out = ""
-        out.reserveCapacity(query.count)
-        for character in query {
-            if character == "\\" || character == "%" || character == "_" {
-                out.append("\\")
-            }
-            out.append(character)
-        }
-        return out
-    }
-
     func search(_ query: String, limit: Int = 100) throws -> [LinkRecord] {
         try dbQueue.read { db in
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            var records: [LinkRecord]
+            let rows: [Row]
             if trimmed.isEmpty {
-                records = try LinkRecord.fetchAll(db, sql: """
+                rows = try Row.fetchAll(db, sql: """
                     SELECT * FROM links WHERE archived = 0
-                    ORDER BY created_at DESC LIMIT ?
+                    ORDER BY updated_at DESC LIMIT ?
                     """, arguments: [limit])
             } else {
-                let like = "%\(Self.escapedForLike(trimmed))%"
-                records = try LinkRecord.fetchAll(db, sql: """
-                    SELECT DISTINCT links.* FROM links
-                    LEFT JOIN link_tags ON link_tags.link_id = links.id
-                    LEFT JOIN tags ON tags.id = link_tags.tag_id
-                    WHERE links.archived = 0 AND (
-                        links.title LIKE ? ESCAPE '\\' OR links.subtitle LIKE ? ESCAPE '\\' OR
-                        links.notes LIKE ? ESCAPE '\\' OR links.payload LIKE ? ESCAPE '\\' OR
-                        tags.name LIKE ? ESCAPE '\\'
-                    )
-                    ORDER BY links.created_at DESC
+                rows = try Row.fetchAll(db, sql: """
+                    SELECT links.* FROM links
+                    WHERE links.archived = 0 AND \(SearchSQL.matchCondition)
+                    ORDER BY links.updated_at DESC
                     LIMIT ?
-                    """, arguments: [like, like, like, like, like, limit])
+                    """, arguments: StatementArguments(SearchSQL.arguments(for: trimmed)) + [limit])
             }
+            var records = Self.decodeSkippingBadRows(rows)
             try self.hydrateTags(&records, db: db)
             return records
+        }
+    }
+
+    /// Decodes rows one by one and skips (and logs) any that fail, so one bad
+    /// payload can't empty every list.
+    private static func decodeSkippingBadRows(_ rows: [Row]) -> [LinkRecord] {
+        rows.compactMap { row in
+            do {
+                return try LinkRecord(row: row)
+            } catch {
+                Log.db.error("skipping undecodable link row \(String(describing: row["id"] as String?), privacy: .public): \(String(describing: error), privacy: .public)")
+                return nil
+            }
         }
     }
 
