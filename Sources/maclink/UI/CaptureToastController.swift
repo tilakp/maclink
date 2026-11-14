@@ -9,7 +9,7 @@ final class CaptureToastController {
 
     private var panel: NSPanel?
     private var dismissWorkItem: DispatchWorkItem?
-    private var trackedRecordIDs: [UUID] = []
+    private var trackedRecords: [LinkRecord] = []
     private var newRecordIDs: Set<UUID> = []
     private var previousClipboard: String?
     private var localEscMonitor: Any?
@@ -21,12 +21,13 @@ final class CaptureToastController {
         guard !records.isEmpty else { return }
         dismiss()
 
-        trackedRecordIDs = records.map { $0.record.id }
+        trackedRecords = records.map(\.record)
         newRecordIDs = Set(records.filter(\.isNew).map { $0.record.id })
         self.previousClipboard = previousClipboard
 
         let view = CaptureToastView(
             records: records.map(\.record),
+            existingTagCount: records.count == 1 && !records[0].isNew ? records[0].record.tags.count : nil,
             onTagsCommitted: { [weak self] text in self?.commitTags(text) },
             onDismiss: { [weak self] in self?.dismiss() },
             onUndo: { [weak self] in self?.undo() },
@@ -109,22 +110,38 @@ final class CaptureToastController {
     }
 
     private func commitTags(_ text: String) {
-        let tags = text
-            .split(whereSeparator: { $0 == "," || $0 == " " })
-            .map(String.init)
-            .filter { !$0.isEmpty }
-        guard !tags.isEmpty else { return }
-        for id in trackedRecordIDs {
+        Self.addTags(text, to: trackedRecords, store: .shared)
+    }
+
+    /// Adds the typed tags to each record's existing tags. A capture can
+    /// reuse an existing link, so the typed tags must not replace its old
+    /// ones. `store` is a parameter so tests can use a temporary database.
+    static func addTags(_ text: String, to records: [LinkRecord], store: LinkStore) {
+        for record in records {
+            let merged = mergedTags(existing: record.tags, typed: text)
+            if merged == record.tags { continue }
             do {
-                try LinkStore.shared.setTags(tags, for: id)
+                try store.setTags(merged, for: record.id)
             } catch {
-                Log.db.error("failed to tag \(id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+                Log.db.error("failed to tag \(record.id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
                 NotificationService.notifyFailure(
                     title: "Couldn't save tags",
                     body: "The link was captured, but its tags weren't saved."
                 )
             }
         }
+    }
+
+    /// Existing tags plus the newly typed ones (split on commas and spaces),
+    /// in order, with no case-insensitive duplicates. Tag slugs are lowercased
+    /// names, so a case-insensitive match is a slug match.
+    static func mergedTags(existing: [String], typed: String) -> [String] {
+        var result = existing
+        var seen = Set(existing.map { $0.lowercased() })
+        for tag in typed.split(whereSeparator: { $0 == "," || $0 == " " }).map(String.init) where !tag.isEmpty {
+            if seen.insert(tag.lowercased()).inserted { result.append(tag) }
+        }
+        return result
     }
 
     /// Deletes only the records this capture actually created. A reused

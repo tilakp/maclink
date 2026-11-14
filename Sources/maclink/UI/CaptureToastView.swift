@@ -3,6 +3,9 @@ import SwiftUI
 /// Content of the capture confirmation toast (spec §9.2).
 struct CaptureToastView: View {
     let records: [LinkRecord]
+    /// Tag count of the one existing link this capture reused. Nil when the
+    /// capture made a new link or captured more than one item.
+    let existingTagCount: Int?
     var onTagsCommitted: (String) -> Void
     var onDismiss: () -> Void
     var onUndo: () -> Void
@@ -70,6 +73,9 @@ struct CaptureToastView: View {
     private var subheadline: String {
         if records.count > 1 {
             return "\(records.count) links copied"
+        }
+        if let n = existingTagCount {
+            return "Existing link (\(n) tag\(n == 1 ? "" : "s")) · copied to clipboard"
         }
         let source = records.first?.sourceAppName ?? ""
         return source.isEmpty ? "Copied to clipboard" : "\(source) · copied to clipboard"
