@@ -82,7 +82,7 @@ final class LinkStore {
 
     func fetchAll(includeArchived: Bool = false, limit: Int = 100) throws -> [LinkRecord] {
         try dbQueue.read { db in
-            var request = LinkRecord.order(LinkRecord.Columns.createdAt.desc).limit(limit)
+            var request = LinkRecord.order(LinkRecord.Columns.updatedAt.desc).limit(limit)
             if !includeArchived {
                 request = request.filter(LinkRecord.Columns.archived == false)
             }
@@ -240,13 +240,13 @@ final class LinkStore {
             if trimmed.isEmpty {
                 records = try LinkRecord.fetchAll(db, sql: """
                     SELECT * FROM links WHERE archived = 0
-                    ORDER BY created_at DESC LIMIT ?
+                    ORDER BY updated_at DESC LIMIT ?
                     """, arguments: [limit])
             } else {
                 records = try LinkRecord.fetchAll(db, sql: """
                     SELECT links.* FROM links
                     WHERE links.archived = 0 AND \(SearchSQL.matchCondition)
-                    ORDER BY links.created_at DESC
+                    ORDER BY links.updated_at DESC
                     LIMIT ?
                     """, arguments: StatementArguments(SearchSQL.arguments(for: trimmed)) + [limit])
             }

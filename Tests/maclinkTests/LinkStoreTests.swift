@@ -45,13 +45,19 @@ final class LinkStoreTests: XCTestCase {
         }
     }
 
-    func testFetchAllOrdersByCreatedAtDescending() throws {
+    func testFetchAllOrdersByMostRecentCapture() throws {
         let first = try store.insert(mailRecord(subject: "First", messageID: "1@example.com"))
         Thread.sleep(forTimeInterval: 0.01)
         let second = try store.insert(mailRecord(subject: "Second", messageID: "2@example.com"))
 
         let all = try store.fetchAll()
         XCTAssertEqual(all.map(\.id), [second.id, first.id])
+
+        // A recapture (dedupe hit) calls `update`, which moves the link to the top.
+        Thread.sleep(forTimeInterval: 0.01)
+        try store.update(first)
+        XCTAssertEqual(try store.fetchAll().map(\.id), [first.id, second.id])
+        XCTAssertEqual(try store.search("").map(\.id), [first.id, second.id])
     }
 
     func testSearchMatchesTitleSubtitleAndTags() throws {

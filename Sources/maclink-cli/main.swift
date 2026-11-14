@@ -72,7 +72,7 @@ func fetchLinks(
                links.resource_type AS resource_type, links.created_at AS created_at
         FROM links
         WHERE links.archived = 0 \(whereClause)
-        ORDER BY links.created_at DESC
+        ORDER BY links.updated_at DESC
         LIMIT ?
         """, arguments: arguments + [limit])
 

@@ -52,7 +52,7 @@ export function queryLinks(query: string, limit = 100): LinkRow[] {
 
   const sql =
     trimmed === ""
-      ? `${SELECT} WHERE links.archived = 0 ORDER BY links.created_at DESC LIMIT ${limit};`
+      ? `${SELECT} WHERE links.archived = 0 ORDER BY links.updated_at DESC LIMIT ${limit};`
       : (() => {
           const pattern = `%${escapeLikeAndQuote(trimmed)}%`;
           // Keep in step with Sources/MaclinkShared/SearchSQL.swift.
@@ -65,7 +65,7 @@ export function queryLinks(query: string, limit = 100): LinkRow[] {
               EXISTS (SELECT 1 FROM link_tags JOIN tags ON tags.id = link_tags.tag_id
                       WHERE link_tags.link_id = links.id AND tags.name LIKE '${pattern}' ESCAPE '\\')
             )
-            ORDER BY links.created_at DESC
+            ORDER BY links.updated_at DESC
             LIMIT ${limit};`;
         })();
 
