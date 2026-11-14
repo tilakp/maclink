@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show toolchain
+        run: |
+          xcode-select -p
+          swift --version
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+      - name: Build CLI (release)
+        run: swift build -c release --product maclink-cli
+      - name: Check Info.plist
+        run: plutil -lint Resources/Info.plist
+      - name: Check shell scripts
+        run: for f in Scripts/*.sh; do bash -n "$f"; done
+      - name: Assemble app bundle
+        run: Scripts/build-app.sh debug adhoc
