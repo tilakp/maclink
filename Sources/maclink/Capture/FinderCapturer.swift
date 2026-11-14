@@ -37,7 +37,7 @@ struct FinderCapturer: Capturer {
         return paths.compactMap { Self.resource(forPath: $0) }
     }
 
-    private static func resource(forPath path: String) -> CapturedResource? {
+    static func resource(forPath path: String, method: CaptureMethod = .applescript) -> CapturedResource? {
         let url = URL(fileURLWithPath: path)
         let values = try? url.resourceValues(forKeys: [
             .isDirectoryKey, .fileSizeKey, .contentTypeKey, .volumeNameKey, .volumeUUIDStringKey
@@ -73,7 +73,7 @@ struct FinderCapturer: Capturer {
             bookmarkData: bookmarkData,
             sourceBundleID: "com.apple.finder",
             sourceAppName: "Finder",
-            captureMethod: .applescript
+            captureMethod: method
         )
     }
 }

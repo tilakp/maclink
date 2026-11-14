@@ -5,15 +5,14 @@ import SwiftUI
 /// `LinkStore`. The `type:`/`#tag`/`app:`/`since:` query mini-language is a
 /// later enhancement, not required for the dropdown to be useful.
 ///
-/// Pinning (via the pin button here or the "Pin Search Window" menu item)
-/// keeps the window open after opening or copying a link, so multiple links
+/// Pinning (via the pin button here) keeps the window open after opening or copying a link, so multiple links
 /// can be acted on in one sitting instead of reopening the dropdown each
 /// time. `StatusItemController` owns `isPinned` since it also has to flip
 /// the popover's dismiss-on-outside-click behavior, not just this view.
 struct SearchPanelView: View {
     @ObservedObject var controller: StatusItemController
     var onSelect: (LinkRecord) -> Void
-    var onCopy: (LinkRecord) -> Void
+    var onCopy: (LinkRecord, CopyKind) -> Void
     var onReveal: (LinkRecord) -> Void
     var onArchive: (LinkRecord) -> Void
     var onDelete: (LinkRecord) -> Void
@@ -37,7 +36,9 @@ struct SearchPanelView: View {
                         case .upArrow: move(-1); return .handled
                         case .return:
                             if press.modifiers.contains(.command) {
-                                copySelected()
+                                copySelected(.link)
+                            } else if press.modifiers.contains(.shift) {
+                                copySelected(.address)
                             } else {
                                 openSelected()
                             }
@@ -98,7 +99,18 @@ struct SearchPanelView: View {
                                     .onTapGesture { onSelect(record) }
                                     .contextMenu {
                                         Button("Open") { onSelect(record) }
-                                        Button("Copy Link") { onCopy(record) }
+                                        Button("Copy Link") { onCopy(record, .link) }
+                                        if ClipboardFormatter.address(for: record) != nil {
+                                            Button(record.resourceType == .file ? "Copy Path" : "Copy Address") {
+                                                onCopy(record, .address)
+                                            }
+                                        }
+                                        if case .file = record.payload {
+                                            Button("Copy File URL") { onCopy(record, .fileURL) }
+                                        }
+                                        if ClipboardFormatter.address(for: record) != nil {
+                                            Button("Copy Markdown Link to Original") { onCopy(record, .markdownAddress) }
+                                        }
                                         if case .file = record.payload {
                                             Button("Reveal in Finder") { onReveal(record) }
                                         }
@@ -174,9 +186,14 @@ struct SearchPanelView: View {
         onSelect(results[selectedIndex])
     }
 
-    private func copySelected() {
+    private func copySelected(_ kind: CopyKind) {
         guard results.indices.contains(selectedIndex) else { return }
-        onCopy(results[selectedIndex])
+        let record = results[selectedIndex]
+        guard ClipboardFormatter.text(for: record, kind: kind, format: .raw) != nil else {
+            NSSound.beep()
+            return
+        }
+        onCopy(record, kind)
     }
 
     private func archiveSelected() {
@@ -194,7 +211,7 @@ struct SearchPanelView: View {
 private struct SearchResultRow: View {
     let record: LinkRecord
     let isSelected: Bool
-    let onCopy: (LinkRecord) -> Void
+    let onCopy: (LinkRecord, CopyKind) -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -220,14 +237,14 @@ private struct SearchResultRow: View {
                     .lineLimit(1)
             }
             Button {
-                onCopy(record)
+                onCopy(record, .link)
             } label: {
                 Image(systemName: "doc.on.doc")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Copy maclink:// URL")
+            .help("Copy link (in your clipboard format)")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)

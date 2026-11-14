@@ -13,4 +13,5 @@ enum CaptureMethod: String, Codable {
     case axGeneric = "ax-generic"
     case manual
     case urlImport = "url-import"
+    case service
 }
