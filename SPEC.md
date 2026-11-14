@@ -527,7 +527,7 @@ end findAndOpen
 
 **Do not** parse `~/Library/Mail/` directly in MVP — the on-disk format (`.emlx` + a SQLite `Envelope Index`) is undocumented, changes between releases, and requires Full Disk Access.
 
-### 7.4 Safari (and Chrome, Phase 2)
+### 7.4 Safari and Chromium browsers
 
 **Safari capture.**
 
@@ -539,7 +539,7 @@ tell application "Safari"
 end tell
 ```
 
-**Chrome capture** (Phase 2; same shape for all Chromium forks — Brave, Edge, Arc, Vivaldi, Orion):
+**Chrome capture** (same shape for all Chromium forks: Brave, Edge, Arc, Vivaldi):
 
 ```applescript
 tell application "Google Chrome"
@@ -554,7 +554,7 @@ Note the dialect difference: Safari uses `current tab` / `name`; Chrome uses `ac
 Both require Automation permission for that browser. Neither requires *Allow JavaScript from Apple Events* for URL+title — only for the Phase-2 extras (selected text, scroll position, canonical URL, `og:` metadata, favicon).
 
 **Normalization at capture time (MVP, cheap wins):**
-- Strip known tracking params: `utm_*`, `fbclid`, `gclid`, `mc_eid`, `ref` on a small allowlist of hosts. Keep the raw URL too, in the payload as `raw_url`.
+- Normalize every captured http/https URL: lowercase scheme and host, drop the default port, use `/` for an empty path, and remove tracking parameters (any `utm_*`, plus `fbclid`, `gclid`, `gclsrc`, `dclid`, `gbraid`, `wbraid`, `msclkid`, `mc_cid`, `mc_eid`, `igshid`, `yclid`, `twclid`, `_hsenc`, `_hsmi`, `mkt_tok`, and `si` on YouTube and Spotify hosts). `ref` is kept: it is a real parameter on many sites. Keep the raw URL in the payload as `raw_url` when it differs. See `Core/URLNormalizer.swift`.
 - Do **not** strip fragments — they're often meaningful anchors.
 
 **Resolution.** Prefer reopening in the browser it came from:
@@ -799,7 +799,7 @@ At capture, before inserting, check for an existing non-archived link with the s
 |---|---|
 | file | `volume_uuid` + `inode`, else normalized `path` |
 | mail | `message_id` |
-| url | normalized URL (scheme+host lowercased, tracking params stripped, trailing slash normalized) |
+| url | the normalized URL (§7.4). `http` vs `https`, `www.`, and trailing slashes on non-root paths are not merged. |
 | generic | never dedupe |
 
 If a match exists: **do not create a new row.** Bump `updated_at`, put the *existing* UUID on the clipboard, and have the toast say "Existing link (3 tags)" so the user knows. This keeps tags/notes attached to one canonical record instead of fragmenting. Add a Settings toggle "Always create a new link" for the user who disagrees.
@@ -1057,8 +1057,8 @@ Capture *from* Emacs: an `emacsclient --eval` call that returns `(buffer-file-na
 Roughly in value order:
 
 1. **`maclink` CLI** (read-only DB access) — unlocks the nicer Emacs integration. *(Small, high value — could arguably be MVP.)* **Built**: `Sources/maclink-cli`, installed via `Scripts/install-cli.sh`; `contrib/maclink.el` uses it.
-2. **Chrome + Chromium forks** (Arc, Brave, Edge). Near-zero marginal cost once Safari works.
-3. **Repair ladder steps 3–5** (Spotlight relink, manual relink UI) — **built**, see `FileRelinker.swift`, but only partially verified live: testing surfaced an `NSMetadataQuery` predicate bug (the `[c]` case-insensitive modifier silently matches nothing against Spotlight; fixed by using plain `==`, as this section already specified) and then, even after that fix, `NSMetadataQuery` from inside the app kept returning zero hits for a file `mdfind` found instantly outside it — steps 3-4 (the actual relink offers) never surfaced a live match, though step 5's give-up prompt (manual picker / delete link) resolved correctly end-to-end including the DB write-back. Most likely cause: maclink has never needed Documents-folder access before, so it may need a one-time grant under System Settings > Privacy & Security > Files and Folders (check there, or watch for a prompt, before assuming it's a code bug). The Mail tier-2 search fallback with a cancellable progress UI is still unbuilt.
+2. **Chrome + Chromium forks** (Arc, Brave, Edge). Near-zero marginal cost once Safari works. **Built** in 0.3: `Capture/ChromiumCapturer.swift`.
+3. **Repair ladder steps 3–5** (Spotlight relink, manual relink UI) — **built**, see `FileRelinker.swift`, but only partially verified live: testing surfaced an `NSMetadataQuery` predicate bug (the `[c]` case-insensitive modifier silently matches nothing against Spotlight; fixed by using plain `==`, as this section already specified) and then, even after that fix, `NSMetadataQuery` from inside the app kept returning zero hits for a file `mdfind` found instantly outside it — steps 3-4 (the actual relink offers) never surfaced a live match, though step 5's give-up prompt (manual picker / delete link) resolved correctly end-to-end including the DB write-back. The cause was a code bug, not a permission: `spotlightSearch` was a non-isolated async function, so `NSMetadataQuery` started on a background thread with no run loop and never gathered results. 0.3 runs it on the main actor (`FileRelinker.swift`). Files in protected folders such as Documents may still need a Files and Folders grant; not yet verified. The Mail tier-2 search fallback with a cancellable progress UI is still unbuilt.
 4. **Emacs as a capture source** via `emacsclient` (§10.5).
 5. **PDF/Preview deep links** — page number via `#page=N`; text-selection anchors need PDFKit and a quoting scheme (store the selected text + page + a character range, re-find the text on open since ranges drift).
 6. **Browser text-selection capture** via `do JavaScript` (requires the user to enable Allow JavaScript from Apple Events) — store `window.getSelection()` text plus a scroll anchor; resolve by re-finding and highlighting.

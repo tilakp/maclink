@@ -12,18 +12,21 @@ See [`SPEC.md`](./SPEC.md) for the full product and technical spec this was buil
 
 The MVP capture/resolve pipeline is complete and verified live against real Finder, Mail, Safari, and arbitrary other apps. The signing/notarization infrastructure is in place (see Distribution note below) but only the ad-hoc path has been run live; the hardened-runtime path and the search dropdown's pin feature were built and structurally checked but not yet exercised live. See the build-order checklist in `SPEC.md` §12-13 for exact scope.
 
-Two Phase 2 pieces have since been added: the read-only `maclink` CLI (verified live), and the file-link repair ladder's Spotlight relink and manual-picker steps (§7.6 steps 3-5). The manual picker and delete-link steps are verified live end-to-end; the Spotlight-relink steps haven't yet shown a confirmed live match, most likely because maclink has never needed (and so never prompted for) Documents-folder access before — see `SPEC.md` §12.2 item 3.
+Two Phase 2 pieces have since been added: the read-only `maclink` CLI (verified live), and the file-link repair ladder's Spotlight relink and manual-picker steps (§7.6 steps 3-5). In 0.2 the Spotlight-relink steps never found a file. The cause was a code bug: the Spotlight query started on a background thread with no run loop, so it never ran. 0.3 fixes this (see `SPEC.md` §12.2 item 3). Files in protected folders such as Documents may still need a Files and Folders grant; this is not yet verified.
 
 ## What works today
 
 - **Global hotkeys**, fully configurable in Settings (default `⌃⌥⌘L` to capture, `⌃⌥⌘K` to search)
-- **Capture**: Finder (selection or front window), Mail.app (selected message), Safari (current tab), and a generic Accessibility-based fallback for everything else. Bonus: any document-based app (TextEdit, Preview, Pages, Xcode, and more) gets a full file link for free via `kAXDocumentAttribute`.
+- **Capture**: Finder (selection or front window), Mail.app (selected message), Safari (current tab), Chromium-family browsers (active tab in Chrome, Chromium, Arc, Brave, Edge, Vivaldi), and a generic Accessibility-based fallback for everything else. Bonus: any document-based app (TextEdit, Preview, Pages, Xcode, and more) gets a full file link for free via `kAXDocumentAttribute`.
 - **Resolve**: opening a `maclink://open/<uuid>` URL brings you back to the exact file (bookmark-based, survives renames and moves), email (via the `message:` URL scheme), web page, or reactivates the source app. If a file's moved somewhere bookmark resolution can't follow, it falls back to a Spotlight name/size search, then a manual file picker or link deletion (spec §7.6).
 - **Search dropdown**: the search hotkey opens a menu-bar-anchored search box over everything you've captured, with per-row copy buttons plus a pin toggle in the dropdown itself so you can open or copy several links in one sitting instead of the window closing after each one. Archive a link (Command-Delete, reversible) or delete it permanently (Shift-Command-Delete, with a confirmation) right from the same list.
-- **Capture toast**: a quick confirmation with inline tagging and an undo action
+- **Clean web links**: tracking parameters (`utm_*`, `fbclid`, `gclid` and similar) are removed before a web link is stored, so the stored URL is clean and recaptures dedupe.
+- **Copy formats**: from the search dropdown, copy the maclink in your chosen format, the original address or path (Shift-Return), the file URL, or a Markdown link to the original address. Org and Markdown titles are escaped.
+- **Finder Services**: select one or more files in Finder, then right-click > Quick Actions (or Services) > Copy maclink. If the item is missing, turn it on in System Settings > Keyboard > Keyboard Shortcuts > Services > Files and Folders.
+- **Capture toast**: a quick confirmation with inline tagging and an undo action. Edit the title before you paste, and tags you add to an existing link are added to its old tags.
 - **Settings window**: clipboard format, launch at login, hotkey rebinding (including turning a hotkey off entirely), a permissions health check, and database tools (reveal in Finder, export as JSON)
 - **Local SQLite database**: plain, queryable `~/Library/Application Support/com.tilak.maclink/maclink.sqlite`. No cloud, no account.
-- **Dedupe**: recapturing the same file, email, or URL reuses the existing link instead of creating a duplicate
+- **Dedupe**: recapturing the same file, email, or URL reuses the existing link instead of creating a duplicate. A recaptured link moves to the top of Recent and of `maclink latest`.
 - **Emacs integration**: works with zero configuration, described below
 
 ## Install
@@ -36,7 +39,7 @@ Universal binary (Apple Silicon and Intel). Requires macOS 14 or later.
 
 ## Building and running
 
-Requires Xcode (for the Swift toolchain) on macOS 14 or later.
+Requires full Xcode on macOS 14 or later. The Command Line Tools alone cannot build maclink (the SwiftUI macro plugins are missing). The scripts in `Scripts/` find `/Applications/Xcode.app` by themselves. For a plain `swift build` or `swift test`, either select Xcode with `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer` or set `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
 
 ```sh
 swift build
@@ -46,7 +49,7 @@ open build/maclink.app
 
 The app is `LSUIElement` (no Dock icon) and lives in your menu bar. First use of each integration (Finder, Mail, Safari, Accessibility) prompts for the relevant macOS permission. That's expected.
 
-Run the test suite with `swift test`.
+Run the test suite with `swift test`. Tests that drive real apps or Spotlight are skipped unless `MACLINK_LIVE_TESTS=1` is set.
 
 ### Distribution note
 
@@ -91,11 +94,13 @@ See `SPEC.md` §10 for the full design.
 A tiny read-only CLI, in `Sources/maclink-cli`, that reads the same SQLite database directly, no running app required. Build and install it with `Scripts/install-cli.sh` (puts it at `~/.local/bin/maclink`):
 
 ```sh
-maclink latest [--org|--json|--url]   # most recent link (default: bare URL)
+maclink latest [--org|--json|--url]   # most recently captured or recaptured link (default: bare URL)
 maclink get <uuid> [--json]
 maclink search <query> [--json] [--limit N]
 maclink capture                        # opens maclink://capture, triggers a capture in the running app
 ```
+
+After you update to 0.3, open the app once before you use the CLI or the Raycast extension. The app adds a search column to the database on first launch.
 
 This is what `contrib/maclink.el`'s optional sugar (`maclink-insert-latest`, the `maclink` org link type's completion) shells out to.
 
