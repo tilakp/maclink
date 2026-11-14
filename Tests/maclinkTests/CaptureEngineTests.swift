@@ -34,4 +34,11 @@ final class CaptureEngineTests: XCTestCase {
             return XCTFail("CaptureError.noSelection should be surfaced")
         }
     }
+
+    // MARK: - ResolveError
+
+    func testOpenFailedHasMessageAndOthersDoNot() {
+        XCTAssertNotNil((ResolveError.openFailed as LocalizedError).errorDescription)
+        XCTAssertNil((ResolveError.fileNotFound as LocalizedError).errorDescription)
+    }
 }
