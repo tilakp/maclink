@@ -24,6 +24,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="maclink"
 APP_DIR="$ROOT/build/$APP_NAME.app"
 CONTENTS="$APP_DIR/Contents"
+source "$ROOT/Scripts/require-xcode.sh"
 
 echo "==> swift build -c $CONFIG"
 swift build --package-path "$ROOT" -c "$CONFIG"

@@ -6,6 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="$HOME/.local/bin/maclink"
+source "$ROOT/Scripts/require-xcode.sh"
 
 echo "==> swift build -c release maclink-cli"
 swift build --package-path "$ROOT" -c release --product maclink-cli
