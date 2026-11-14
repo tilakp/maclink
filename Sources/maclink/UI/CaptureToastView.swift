@@ -6,13 +6,16 @@ struct CaptureToastView: View {
     /// Tag count of the one existing link this capture reused. Nil when the
     /// capture made a new link or captured more than one item.
     let existingTagCount: Int?
-    var onTagsCommitted: (String) -> Void
+    var onCommit: (_ title: String, _ tags: String) -> Void
     var onDismiss: () -> Void
     var onUndo: () -> Void
     var onFieldFocusChanged: (Bool) -> Void
 
+    private enum Field { case title, tags }
+
+    @State private var titleText = ""
     @State private var tagText = ""
-    @FocusState private var tagFieldFocused: Bool
+    @FocusState private var focusedField: Field?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -22,9 +25,21 @@ struct CaptureToastView: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(headline)
-                        .font(.system(size: 13, weight: .medium))
-                        .lineLimit(1)
+                    if records.count == 1 {
+                        TextField("Title", text: $titleText)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 13, weight: .medium))
+                            .lineLimit(1)
+                            .focused($focusedField, equals: .title)
+                            .onSubmit {
+                                onCommit(titleText, tagText)
+                                onDismiss()
+                            }
+                    } else {
+                        Text(headline)
+                            .font(.system(size: 13, weight: .medium))
+                            .lineLimit(1)
+                    }
                     Text(subheadline)
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
@@ -43,17 +58,18 @@ struct CaptureToastView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 5)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
-                .focused($tagFieldFocused)
+                .focused($focusedField, equals: .tags)
                 .onSubmit {
-                    onTagsCommitted(tagText)
+                    onCommit(titleText, tagText)
                     onDismiss()
                 }
         }
         .padding(12)
         .frame(width: 320)
+        .onAppear { titleText = records.first?.title ?? "" }
         .onKeyPress(.escape) { onDismiss(); return .handled }
         .onKeyPress(.deleteForward, phases: .down) { _ in .ignored } // no-op, keeps ⌫ local to the field
-        .onChange(of: tagFieldFocused) { _, focused in onFieldFocusChanged(focused) }
+        .onChange(of: focusedField) { _, field in onFieldFocusChanged(field != nil) }
         .background(KeyEquivalentCatcher(onCommandDelete: onUndo))
     }
 

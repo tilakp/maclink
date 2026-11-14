@@ -207,6 +207,23 @@ final class LinkService {
         return true
     }
 
+    /// Renames a link. If the clipboard still holds exactly what the capture
+    /// wrote (same `changeCount`), it is rewritten with the new title, so a
+    /// pasted org or Markdown link carries it.
+    func rename(id: UUID, to newTitle: String, clipboardChangeCount: Int) {
+        do {
+            guard var record = try store.fetch(id: id) else { return }
+            record.title = newTitle
+            try store.update(record)
+            if NSPasteboard.general.changeCount == clipboardChangeCount {
+                writeToClipboard(Self.formatClipboardEntry(url: ClipboardFormatter.maclinkURL(for: record), title: newTitle))
+            }
+        } catch {
+            Log.db.error("rename failed for \(id.uuidString, privacy: .public): \(String(describing: error), privacy: .public)")
+            NotificationService.notifyFailure(title: "Couldn't rename the link", body: Self.friendlyMessage(for: error, sourceAppName: nil))
+        }
+    }
+
     /// Hides the link from search/recent without losing it. Reversible.
     func archive(_ record: LinkRecord) {
         do {

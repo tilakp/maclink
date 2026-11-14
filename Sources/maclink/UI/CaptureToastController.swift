@@ -12,6 +12,7 @@ final class CaptureToastController {
     private var trackedRecords: [LinkRecord] = []
     private var newRecordIDs: Set<UUID> = []
     private var previousClipboard: String?
+    private var clipboardChangeCount = 0
     private var localEscMonitor: Any?
     private var globalEscMonitor: Any?
 
@@ -24,11 +25,13 @@ final class CaptureToastController {
         trackedRecords = records.map(\.record)
         newRecordIDs = Set(records.filter(\.isNew).map { $0.record.id })
         self.previousClipboard = previousClipboard
+        // The capture wrote the clipboard just before this runs.
+        clipboardChangeCount = NSPasteboard.general.changeCount
 
         let view = CaptureToastView(
             records: records.map(\.record),
             existingTagCount: records.count == 1 && !records[0].isNew ? records[0].record.tags.count : nil,
-            onTagsCommitted: { [weak self] text in self?.commitTags(text) },
+            onCommit: { [weak self] title, tags in self?.commit(title: title, tags: tags) },
             onDismiss: { [weak self] in self?.dismiss() },
             onUndo: { [weak self] in self?.undo() },
             onFieldFocusChanged: { [weak self] focused in
@@ -109,8 +112,14 @@ final class CaptureToastController {
         dismissWorkItem = nil
     }
 
-    private func commitTags(_ text: String) {
-        Self.addTags(text, to: trackedRecords, store: .shared)
+    private func commit(title: String, tags: String) {
+        if trackedRecords.count == 1 {
+            let newTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !newTitle.isEmpty && newTitle != trackedRecords[0].title {
+                LinkService.shared.rename(id: trackedRecords[0].id, to: newTitle, clipboardChangeCount: clipboardChangeCount)
+            }
+        }
+        Self.addTags(tags, to: trackedRecords, store: .shared)
     }
 
     /// Adds the typed tags to each record's existing tags. A capture can
