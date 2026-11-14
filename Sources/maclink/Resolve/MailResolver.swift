@@ -20,9 +20,8 @@ struct MailResolver: Resolver {
         guard let url = URL(string: urlString) else {
             throw ResolveError.noStableIdentifier
         }
-        await MainActor.run {
-            NSWorkspace.shared.open(url)
-        }
+        let opened = await MainActor.run { NSWorkspace.shared.open(url) }
+        guard opened else { throw ResolveError.openFailed }
         return nil
     }
 }

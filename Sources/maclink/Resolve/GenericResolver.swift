@@ -16,8 +16,11 @@ struct GenericResolver: Resolver {
             throw ResolveError.appNotInstalled
         }
 
-        await MainActor.run {
-            NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration())
+        do {
+            _ = try await NSWorkspace.shared.openApplication(at: appURL, configuration: NSWorkspace.OpenConfiguration())
+        } catch {
+            Log.resolve.error("open \(bundleID, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            throw ResolveError.openFailed
         }
         try? await Self.raiseWindow(bundleID: bundleID, title: payload.windowTitle)
         return nil

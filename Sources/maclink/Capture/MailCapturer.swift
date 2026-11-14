@@ -7,10 +7,9 @@ import Foundation
 ///
 /// - `selection` is a property of the *application*, not a window; if the
 ///   user is reading a message in its own separate window rather than the
-///   list, `selection` can come back empty. MVP accepts that gap (the
-///   generic AX fallback, once it exists, is the safety net) rather than
-///   adding window-enumeration logic Mail's own scripting dictionary makes
-///   awkward.
+///   list, `selection` can come back empty. MVP accepts that gap: the
+///   capture then fails with "Nothing to capture" instead of making a
+///   window-title link to Mail.
 /// - `message id` is returned WITHOUT angle brackets on current macOS, but
 ///   this has varied historically. Normalize defensively in both
 ///   directions rather than assume either shape.
