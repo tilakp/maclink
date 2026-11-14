@@ -57,21 +57,22 @@ struct Link {
     var url: String { "maclink://open/\(id)" }
 }
 
-/// Fetches links matching `whereClause` (ANDed onto `archived = 0`), then
-/// hydrates tags in one follow-up query rather than via GROUP_CONCAT, so a
-/// tag-matching search still returns each link's full tag list, not just the
-/// tag that matched.
+/// Fetches links matching `whereClause` (ANDed onto `archived = 0`, unless
+/// `includeArchived`), then hydrates tags in one follow-up query rather than
+/// via GROUP_CONCAT, so a tag-matching search still returns each link's full
+/// tag list, not just the tag that matched.
 func fetchLinks(
     db: Database,
     whereClause: String,
     arguments: StatementArguments,
-    limit: Int
+    limit: Int,
+    includeArchived: Bool = false
 ) throws -> [Link] {
     let rows = try Row.fetchAll(db, sql: """
         SELECT links.id AS id, links.title AS title, links.subtitle AS subtitle,
                links.resource_type AS resource_type, links.created_at AS created_at
         FROM links
-        WHERE links.archived = 0 \(whereClause)
+        WHERE \(includeArchived ? "1 = 1" : "links.archived = 0") \(whereClause)
         ORDER BY links.updated_at DESC
         LIMIT ?
         """, arguments: arguments + [limit])
@@ -160,7 +161,8 @@ func runGet(_ args: [String]) throws {
 
     let db = try openDatabase()
     let link = try db.read { db in
-        try fetchLinks(db: db, whereClause: "AND links.id = ?", arguments: [idArg.uppercased()], limit: 1)
+        try fetchLinks(db: db, whereClause: "AND links.id = ?", arguments: [idArg.uppercased()], limit: 1,
+                       includeArchived: true)
     }.first
     guard let link else { throw CLIError.notFound("no link with id \(idArg)") }
 
@@ -182,8 +184,8 @@ func runSearch(_ args: [String]) throws {
             asJSON = true
         case "--limit":
             i += 1
-            guard i < args.count, let n = Int(args[i]) else {
-                throw CLIError.usage("--limit requires a number")
+            guard i < args.count, let n = Int(args[i]), n > 0 else {
+                throw CLIError.usage("--limit requires a positive number")
             }
             limit = n
         default:
