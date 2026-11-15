@@ -18,6 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Open the database now so its migrations run at launch. The CLI and
+        // the Raycast extension read the `search_text` column that `v2` adds,
+        // and `LinkStore.shared` is otherwise only created on first use.
+        _ = LinkStore.shared
         StatusItemController.shared.setup()
         NSApp.servicesProvider = servicesProvider
         NSUpdateDynamicServices()
