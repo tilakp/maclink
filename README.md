@@ -110,7 +110,7 @@ This is what `contrib/maclink.el`'s optional sugar (`maclink-insert-latest`, the
 
 ## Architecture, briefly
 
-A global hotkey (Carbon `RegisterEventHotKey`, no Accessibility permission needed) triggers `CaptureEngine`, which picks a per-app `Capturer` (Finder, Mail, Safari, or the generic AX fallback). Each capturer runs an `NSAppleScript` through `AutomationService`, a single serial queue that keeps every script call off the main thread and bounded by a timeout, since `NSAppleScript` isn't thread-safe and a hung target app shouldn't hang maclink.
+A global hotkey (Carbon `RegisterEventHotKey`, no Accessibility permission needed) triggers `CaptureEngine`, which picks a per-app `Capturer` (Finder, Mail, Safari, or Chromium-family browsers). Apps with no specific capturer use the generic AX capturer. If a specific capturer fails, maclink shows the error to the user. Each capturer runs an `NSAppleScript` through `AutomationService`, a single serial queue that keeps every script call off the main thread and bounded by a timeout, since `NSAppleScript` isn't thread-safe and a hung target app shouldn't hang maclink.
 
 The captured resource becomes a `LinkRecord` in `LinkStore` (GRDB/SQLite), keyed by a UUID that's also the `maclink://open/<uuid>` URL. The scheme is registered via `CFBundleURLTypes` and handled through `NSAppleEventManager`. Opening that URL routes through `ResolveEngine` to the matching `Resolver`, which brings you back to the resource and repairs anything that moved, file bookmarks in particular.
 
